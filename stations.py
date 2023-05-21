@@ -1,7 +1,7 @@
 RADIO_STATIONS = [
     {
         "name": "IRIB Radio Arabic",
-        "url": "http://s0.cdn2.iranseda.ir:1935/liveedge/radio-arabic/playlist.m3u8",
+        "url": "http://s0.cdn1.iranseda.ir:1935/liveedge/radio-arabic/playlist.m3u8",
     },
     {
         "name": "IRIB Radio Avaa",
@@ -13,19 +13,19 @@ RADIO_STATIONS = [
     },
     {
         "name": "IRIB Radio Farhang",
-        "url": "http://s0.cdn2.iranseda.ir:1935/liveedge/radio-farhang/playlist.m3u8",
+        "url": "http://s0.cdn1.iranseda.ir:1935/liveedge/radio-farhang/playlist.m3u8",
     },
     {
         "name": "IRIB Radio Iran",
-        "url": "http://s0.cdn2.iranseda.ir:1935/liveedge/radio-iran/playlist.m3u8",
+        "url": "http://s0.cdn1.iranseda.ir:1935/liveedge/radio-iran/playlist.m3u8",
     },
     {
         "name": "IRIB Radio Javan",
-        "url": "http://s0.cdn2.iranseda.ir:1935/liveedge/radio-javan/playlist.m3u8",
+        "url": "http://s0.cdn1.iranseda.ir:1935/liveedge/radio-javan/playlist.m3u8",
     },
     {
         "name": "IRIB Radio Ma'aref",
-        "url": "http://s0.cdn2.iranseda.ir:1935/liveedge/radio-maaref/playlist.m3u8",
+        "url": "http://s0.cdn1.iranseda.ir:1935/liveedge/radio-maaref/playlist.m3u8",
     },
     {
         "name": "IRIB Radio Markazi",
@@ -33,7 +33,7 @@ RADIO_STATIONS = [
     },
     {
         "name": "IRIB Radio Namayesh",
-        "url": "http://s0.cdn2.iranseda.ir:1935/liveedge/radio-namayesh/playlist.m3u8",
+        "url": "http://s0.cdn1.iranseda.ir:1935/liveedge/radio-namayesh/playlist.m3u8",
     },
     {
         "name": "IRIB Radio Payam",
@@ -49,7 +49,7 @@ RADIO_STATIONS = [
     },
     {
         "name": "IRIB Radio Salamat",
-        "url": "http://s0.cdn2.iranseda.ir:1935/liveedge/radio-salamat/playlist.m3u8",
+        "url": "http://s0.cdn1.iranseda.ir:1935/liveedge/radio-salamat/playlist.m3u8",
     },
     {
         "name": "IRIB Radio Talavat",
@@ -57,7 +57,7 @@ RADIO_STATIONS = [
     },
     {
         "name": "IRIB Radio Tartil",
-        "url": "http://s0.cdn2.iranseda.ir:1935/liveedge/radio-tartil/playlist.m3u8",
+        "url": "http://s0.cdn1.iranseda.ir:1935/liveedge/radio-tartil/playlist.m3u8",
     },
     {
         "name": "IRIB Radio Varzesh",
@@ -144,12 +144,12 @@ TV_STATIONS = [
         "url": "https://cdn-bsht1c86.telewebion.com/salamat/live/576p/index.m3u8",
     },
     {
-        "name": "PRESSTV",
-        "url": "https://cdnlive.presstv.ir/cdnlive/smil:cdnlive.smil/playlist.m3u8",
-    },
-    {
         "name": "IRIB TV Varzesh",
         "url": "https://cdn-bsht1c86.telewebion.com/varzesh/live/480p/index.m3u8",
+    },
+    {
+        "name": "PRESSTV",
+        "url": "https://cdnlive.presstv.ir/cdnlive/smil:cdnlive.smil/playlist.m3u8",
     },
 ]
 

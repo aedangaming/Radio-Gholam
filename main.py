@@ -1,4 +1,5 @@
 from bot import client, TOKEN
+import events
 import commands
 
 

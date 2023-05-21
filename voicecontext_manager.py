@@ -78,8 +78,7 @@ async def disconnect_voice_client(voice_client: VoiceClient):
 
 
 # Resume playing after moving the bot between voice channels
-@client.event
-async def on_voice_state_update(
+async def continue_playing_moved_voice_client(
     member: Member,
     before: VoiceState,
     after: VoiceState,

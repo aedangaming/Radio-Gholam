@@ -1,5 +1,5 @@
 from bot import client, is_guild_allowed
-from nextcord import Interaction, SlashOption, FFmpegPCMAudio, VoiceChannel, VoiceClient
+from nextcord import Interaction, SlashOption, FFmpegOpusAudio, VoiceChannel, VoiceClient
 from voicecontext_manager import (
     connect_to_voice_channel,
     disconnect_voice_client,
@@ -53,7 +53,7 @@ async def radio(
         if voice_client.is_playing():
             voice_client.stop()
 
-        audio_source = FFmpegPCMAudio(get_radio_station_url(station))
+        audio_source = FFmpegOpusAudio(get_radio_station_url(station), before_options="-fflags discardcorrupt")
         voice_client.play(audio_source)
 
         await interaction_response.edit(content=f"Now playing **{station}**.")
@@ -110,7 +110,7 @@ async def tv(
         if voice_client.is_playing():
             voice_client.stop()
 
-        audio_source = FFmpegPCMAudio(get_tv_station_url(station))
+        audio_source = FFmpegOpusAudio(get_tv_station_url(station), before_options="-fflags discardcorrupt")
         voice_client.play(audio_source)
 
         await interaction_response.edit(content=f"Now playing **{station}**.")
@@ -165,7 +165,7 @@ async def play(
         if voice_client.is_playing():
             voice_client.stop()
 
-        audio_source = FFmpegPCMAudio(input)
+        audio_source = FFmpegOpusAudio(input, before_options="-fflags discardcorrupt")
         voice_client.play(audio_source)
 
         await interaction_response.edit(content=f"Now playing **{input}**.")
