@@ -2,8 +2,9 @@ import random
 import asyncio
 from bot import client
 from nextcord import VoiceClient, VoiceChannel, VoiceState, Member
+import ffmpeg
 
-# Store active voice contexts, including VoiceClient and other variables like playlist
+# Store active voice contexts, including playlist, current audio_source and other variables
 voice_contexts = {}
 
 
@@ -110,3 +111,66 @@ async def continue_playing_moved_voice_client(
         await asyncio.sleep(1.5)  # wait a moment for it to set in
         vc.pause()
         vc.resume()
+
+
+def get_input_tags(input):
+    try:
+        meta = ffmpeg.probe(input)
+    except Exception as e:
+        print(e)
+        return None
+
+    if not meta["format"]:
+        return None
+
+    duration = meta["format"].get("duration")
+    title = None
+    artist = None
+    stream_title = None
+
+    if meta["format"].get("tags"):
+        title = meta["format"]["tags"].get("title")
+        artist = meta["format"]["tags"].get("artist")
+        stream_title = meta["format"]["tags"].get("StreamTitle")
+
+    return {
+        "duration": duration,
+        "title": title,
+        "artist": artist,
+        "stream_title": stream_title,
+    }
+
+
+def generate_input_info(input, tags):
+    info = f"**{input}**"
+    if not tags:
+        return info
+    
+    title = tags["title"]
+    artist = tags["artist"]
+    stream_title = tags["stream_title"]
+    duration = tags["duration"]
+
+    if title and artist:
+        info = f"{title} - {artist}"
+    elif title:
+        info = title
+    elif artist:
+        info = artist
+
+    if stream_title:
+        info = f" 🔴 LIVE |  **{stream_title}**"
+    else:
+        info = f" 🔊  **{info}**"
+
+    if duration:
+        duration = duration.split(".")[0]
+        info = (
+            info
+            + "‎ ["  # Left-to-right mark
+            + str(int(int(duration) / 60))
+            + ":"
+            + "{:02d}]".format(int(duration) % 60)
+        )
+
+    return info

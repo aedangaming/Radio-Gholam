@@ -7,7 +7,7 @@ from nextcord.ext import commands
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
-ALLOWD_SERVERS = json.loads(os.getenv("SERVER_ID"))
+ALLOWED_SERVERS = json.loads(os.getenv("SERVER_ID"))
 
 
 intents = nextcord.Intents.all()
@@ -18,7 +18,7 @@ client = commands.Bot(command_prefix="!", intents=intents)
 
 def is_guild_allowed(id: int):
     try:
-        return ALLOWD_SERVERS[str(id)]
+        return ALLOWED_SERVERS[str(id)]
     except Exception as e:
         print(e)
     return False

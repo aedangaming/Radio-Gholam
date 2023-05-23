@@ -1,10 +1,18 @@
 from bot import client, is_guild_allowed
-from nextcord import Interaction, SlashOption, FFmpegOpusAudio, VoiceChannel, VoiceClient
+from nextcord import (
+    Interaction,
+    SlashOption,
+    FFmpegOpusAudio,
+    VoiceChannel,
+    VoiceClient,
+)
 from voicecontext_manager import (
     connect_to_voice_channel,
     disconnect_voice_client,
     get_voice_client_if_exists,
     clear_playlist,
+    get_input_tags,
+    generate_input_info,
 )
 from stations import (
     get_radio_station_names,
@@ -53,10 +61,14 @@ async def radio(
         if voice_client.is_playing():
             voice_client.stop()
 
-        audio_source = FFmpegOpusAudio(get_radio_station_url(station), before_options="-fflags discardcorrupt")
+        audio_source = FFmpegOpusAudio(
+            get_radio_station_url(station), before_options="-fflags discardcorrupt"
+        )
         voice_client.play(audio_source)
 
-        await interaction_response.edit(content=f"Now playing **{station}**.")
+        await interaction_response.edit(
+            content=f"Now playing  | 🔴 LIVE |  **{station}**."
+        )
 
     except Exception as e:
         print(e)
@@ -110,10 +122,14 @@ async def tv(
         if voice_client.is_playing():
             voice_client.stop()
 
-        audio_source = FFmpegOpusAudio(get_tv_station_url(station), before_options="-fflags discardcorrupt")
+        audio_source = FFmpegOpusAudio(
+            get_tv_station_url(station), before_options="-fflags discardcorrupt"
+        )
         voice_client.play(audio_source)
 
-        await interaction_response.edit(content=f"Now playing **{station}**.")
+        await interaction_response.edit(
+            content=f"Now playing  | 🔴 LIVE |  **{station}**."
+        )
 
     except Exception as e:
         print(e)
@@ -168,7 +184,10 @@ async def play(
         audio_source = FFmpegOpusAudio(input, before_options="-fflags discardcorrupt")
         voice_client.play(audio_source)
 
-        await interaction_response.edit(content=f"Now playing **{input}**.")
+        tags = get_input_tags(input)
+        await interaction_response.edit(
+            content=f"Now playing {generate_input_info(input, tags)}."
+        )
 
     except Exception as e:
         print(e)
