@@ -153,7 +153,13 @@ async def after_playing(voice_client: VoiceClient):
 
     # Go for the next track!
     context["next"] = False
-    index = index + 1
+    if context[
+        "new_playlist"
+    ]:  # if it is the first time to play this playlist, do not increase index
+        context["new_playlist"] = False
+    else:
+        index = index + 1
+
     if index >= len(context["playlist"]):  # End of the playlist
         index = 0
         context["current_track_index"] = index
