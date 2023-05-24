@@ -1,6 +1,6 @@
 from bot import client
 from nextcord import Member, VoiceState
-from voicecontext_manager import continue_playing_moved_voice_client
+from music_player import continue_playing_moved_voice_client
 
 
 @client.event

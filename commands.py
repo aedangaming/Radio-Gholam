@@ -2,17 +2,8 @@ from bot import client, is_guild_allowed
 from nextcord import (
     Interaction,
     SlashOption,
-    FFmpegOpusAudio,
     VoiceChannel,
     VoiceClient,
-)
-from voicecontext_manager import (
-    connect_to_voice_channel,
-    disconnect_voice_client,
-    get_voice_client_if_exists,
-    clear_playlist,
-    get_input_tags,
-    generate_input_info,
 )
 from stations import (
     get_radio_station_names,
@@ -20,6 +11,7 @@ from stations import (
     get_tv_station_names,
     get_tv_station_url,
 )
+import music_player
 from version import VERSION
 
 
@@ -45,10 +37,12 @@ async def radio(
             )
             return
 
-        interaction_response = await interaction.send("Tuning ...")
+        interaction_response = await interaction.send("Tuning...")
 
         voice_channel: VoiceChannel = interaction.user.voice.channel
-        voice_client: VoiceClient = await connect_to_voice_channel(voice_channel)
+        voice_client: VoiceClient = (
+            await music_player.connect_or_get_connected_voice_client(voice_channel)
+        )
 
         if not voice_client:
             await interaction_response.edit(
@@ -56,24 +50,15 @@ async def radio(
             )
             return
 
-        clear_playlist(voice_client.guild.id)
-
-        if voice_client.is_playing():
-            voice_client.stop()
-
-        audio_source = FFmpegOpusAudio(
-            get_radio_station_url(station), before_options="-fflags discardcorrupt"
+        result_message = music_player.play(
+            voice_client, get_radio_station_url(station), force_title=station
         )
-        voice_client.play(audio_source)
-
-        await interaction_response.edit(
-            content=f"Now playing  | 🔴 LIVE |  **{station}**."
-        )
+        await interaction_response.edit(content=result_message)
 
     except Exception as e:
         print(e)
         try:
-            await disconnect_voice_client(voice_client)
+            await music_player.disconnect_voice_client(voice_client)
         except Exception as e:
             print(e)
         try:
@@ -106,10 +91,12 @@ async def tv(
             )
             return
 
-        interaction_response = await interaction.send("Tuning ...")
+        interaction_response = await interaction.send("Tuning...")
 
         voice_channel: VoiceChannel = interaction.user.voice.channel
-        voice_client: VoiceClient = await connect_to_voice_channel(voice_channel)
+        voice_client: VoiceClient = (
+            await music_player.connect_or_get_connected_voice_client(voice_channel)
+        )
 
         if not voice_client:
             await interaction_response.edit(
@@ -117,24 +104,15 @@ async def tv(
             )
             return
 
-        clear_playlist(voice_client.guild.id)
-
-        if voice_client.is_playing():
-            voice_client.stop()
-
-        audio_source = FFmpegOpusAudio(
-            get_tv_station_url(station), before_options="-fflags discardcorrupt"
+        result_message = music_player.play(
+            voice_client, get_tv_station_url(station), force_title=station
         )
-        voice_client.play(audio_source)
-
-        await interaction_response.edit(
-            content=f"Now playing  | 🔴 LIVE |  **{station}**."
-        )
+        await interaction_response.edit(content=result_message)
 
     except Exception as e:
         print(e)
         try:
-            await disconnect_voice_client(voice_client)
+            await music_player.disconnect_voice_client(voice_client)
         except Exception as e:
             print(e)
         try:
@@ -147,8 +125,7 @@ async def tv(
 
 @client.slash_command(name="play", description="Play a link")
 async def play(
-    interaction: Interaction,
-    input: str = SlashOption(name="link", required=True),
+    interaction: Interaction, input: str = SlashOption(name="link", required=True)
 ):
     try:
         # Check if the guild is allowed
@@ -165,10 +142,12 @@ async def play(
             )
             return
 
-        interaction_response = await interaction.send("Tuning ...")
+        interaction_response = await interaction.send("Please wait...")
 
         voice_channel: VoiceChannel = interaction.user.voice.channel
-        voice_client: VoiceClient = await connect_to_voice_channel(voice_channel)
+        voice_client: VoiceClient = (
+            await music_player.connect_or_get_connected_voice_client(voice_channel)
+        )
 
         if not voice_client:
             await interaction_response.edit(
@@ -176,23 +155,13 @@ async def play(
             )
             return
 
-        clear_playlist(voice_client.guild.id)
-
-        if voice_client.is_playing():
-            voice_client.stop()
-
-        audio_source = FFmpegOpusAudio(input, before_options="-fflags discardcorrupt")
-        voice_client.play(audio_source)
-
-        tags = get_input_tags(input)
-        await interaction_response.edit(
-            content=f"Now playing {generate_input_info(input, tags)}."
-        )
+        result_message = music_player.play(voice_client, input)
+        await interaction_response.edit(content=result_message)
 
     except Exception as e:
         print(e)
         try:
-            await disconnect_voice_client(voice_client)
+            await music_player.disconnect_voice_client(voice_client)
         except Exception as e:
             print(e)
         try:
@@ -203,66 +172,7 @@ async def play(
             print(e)
 
 
-# @client.slash_command(name="delsookhtegan", description="Play from Delsookhtegan")
-# async def play(
-#     interaction: Interaction,
-#     query: str = SlashOption(name="query", required=False),
-# ):
-#     try:
-#         # Check if the guild is allowed
-#         if not is_guild_allowed(interaction.guild_id):
-#             await interaction.send(
-#                 "This command is not allowed on this server.", ephemeral=True
-#             )
-#             return
-
-#         # Check if user is in a voice channel
-#         if interaction.user.voice is None:
-#             await interaction.send(
-#                 "You must be in a voice channel to use this command.", ephemeral=True
-#             )
-#             return
-
-#         interaction_response = await interaction.send("Tuning ...")
-
-#         voice_channel: VoiceChannel = interaction.user.voice.channel
-
-#         # Check if there is an active VoiceClient
-#         voice_client: VoiceClient = get_voice_context_if_exists(interaction.guild_id)
-
-#         # Connect to voice if it is not already connected.
-#         if voice_client is None:
-#             voice_client = await voice_channel.connect()
-#         if not voice_client.is_connected():
-#             await voice_client.connect()
-
-#         store_voice_client(voice_client)
-
-#         if voice_client.is_playing():
-#             voice_client.stop()
-
-#         audio_source = FFmpegPCMAudio(input)
-#         voice_client.play(audio_source)
-
-#         await interaction_response.edit(content=f"Now playing **{input}**.")
-
-#     except Exception as e:
-#         print(e)
-#         try:
-#             if voice_client is not None:
-#                 await voice_client.disconnect()
-#                 remove_voice_client(voice_client)
-#         except Exception as e:
-#             print(e)
-#         try:
-#             await interaction_response.edit(
-#                 content=f"Cannot play **{input}** right now."
-#             )
-#         except Exception as e:
-#             print(e)
-
-
-@client.slash_command(name="stop", description="Stop playing radio")
+@client.slash_command(name="stop", description="Stop playing")
 async def stop(interaction: Interaction):
     try:
         # Check if the guild is allowed
@@ -280,10 +190,12 @@ async def stop(interaction: Interaction):
             )
             return
 
-        voice_client: VoiceClient = get_voice_client_if_exists(interaction.guild_id)
+        voice_client: VoiceClient = music_player.get_voice_client_if_exists(
+            interaction.guild_id
+        )
 
         if voice_client is None:
-            await interaction.send("Radio is not playing...", ephemeral=True)
+            await interaction.send("The playlist is empty.", ephemeral=True)
             return
 
         user_voice_channel: VoiceChannel = interaction.user.voice.channel
@@ -296,13 +208,328 @@ async def stop(interaction: Interaction):
             return
 
         interation_response = await interaction.send("Stopping...")
-
-        try:
-            await disconnect_voice_client(voice_client)
-        except Exception as e:
-            print(e)
-
+        await music_player.stop(voice_client)
         await interation_response.edit(content="Stopped.")
+    except Exception as e:
+        print(e)
+
+
+@client.slash_command(name="next", description="Play the next track in the playlist")
+async def next(interaction: Interaction):
+    try:
+        # Check if the guild is allowed
+        if not is_guild_allowed(interaction.guild_id):
+            await interaction.send(
+                "This command is not allowed on this server.", ephemeral=True
+            )
+            return
+
+        # Check if user is in the same voice channel
+        if interaction.user.voice is None:
+            await interaction.send(
+                "You must be in the target voice channel to use this command.",
+                ephemeral=True,
+            )
+            return
+
+        voice_client: VoiceClient = music_player.get_voice_client_if_exists(
+            interaction.guild_id
+        )
+
+        if voice_client is None:
+            await interaction.send("The playlist is empty.", ephemeral=True)
+            return
+
+        user_voice_channel: VoiceChannel = interaction.user.voice.channel
+
+        if user_voice_channel.id != voice_client.channel.id:
+            await interaction.send(
+                "You must be in the same voice channel as Radio Gholam is.",
+                ephemeral=True,
+            )
+            return
+
+        interation_response = await interaction.send("Skipping...")
+        result_message = await music_player.next(voice_client)
+        await interation_response.edit(content=result_message)
+    except Exception as e:
+        print(e)
+
+
+@client.slash_command(
+    name="previous", description="Play the previous track in the playlist"
+)
+async def previous(interaction: Interaction):
+    try:
+        # Check if the guild is allowed
+        if not is_guild_allowed(interaction.guild_id):
+            await interaction.send(
+                "This command is not allowed on this server.", ephemeral=True
+            )
+            return
+
+        # Check if user is in the same voice channel
+        if interaction.user.voice is None:
+            await interaction.send(
+                "You must be in the target voice channel to use this command.",
+                ephemeral=True,
+            )
+            return
+
+        voice_client: VoiceClient = music_player.get_voice_client_if_exists(
+            interaction.guild_id
+        )
+
+        if voice_client is None:
+            await interaction.send("The playlist is empty.", ephemeral=True)
+            return
+
+        user_voice_channel: VoiceChannel = interaction.user.voice.channel
+
+        if user_voice_channel.id != voice_client.channel.id:
+            await interaction.send(
+                "You must be in the same voice channel as Radio Gholam is.",
+                ephemeral=True,
+            )
+            return
+
+        interation_response = await interaction.send("Rewinding...")
+        result_message = await music_player.previous(voice_client)
+        await interation_response.edit(content=result_message)
+    except Exception as e:
+        print(e)
+
+
+@client.slash_command(name="loop", description="Repeat the playlist or a single track")
+async def loop(
+    interaction: Interaction,
+    loop: str = SlashOption(
+        name="loop", choices=["playlist", "track", "none"], required=True
+    ),
+):
+    try:
+        # Check if the guild is allowed
+        if not is_guild_allowed(interaction.guild_id):
+            await interaction.send(
+                "This command is not allowed on this server.", ephemeral=True
+            )
+            return
+
+        # Check if user is in the same voice channel
+        if interaction.user.voice is None:
+            await interaction.send(
+                "You must be in the target voice channel to use this command.",
+                ephemeral=True,
+            )
+            return
+
+        voice_client: VoiceClient = music_player.get_voice_client_if_exists(
+            interaction.guild_id
+        )
+
+        if voice_client is None:
+            await interaction.send("The playlist is empty.", ephemeral=True)
+            return
+
+        user_voice_channel: VoiceChannel = interaction.user.voice.channel
+
+        if user_voice_channel.id != voice_client.channel.id:
+            await interaction.send(
+                "You must be in the same voice channel as Radio Gholam is.",
+                ephemeral=True,
+            )
+            return
+
+        interation_response = await interaction.send("Please wait...")
+        music_player.loop(voice_client, loop)
+        await interation_response.edit(content=f"Loop mode: **{loop}**")
+    except Exception as e:
+        print(e)
+
+
+@client.slash_command(name="shuffle", description="Shuffles current playlist")
+async def shuffle(interaction: Interaction):
+    try:
+        # Check if the guild is allowed
+        if not is_guild_allowed(interaction.guild_id):
+            await interaction.send(
+                "This command is not allowed on this server.", ephemeral=True
+            )
+            return
+
+        # Check if user is in the same voice channel
+        if interaction.user.voice is None:
+            await interaction.send(
+                "You must be in the target voice channel to use this command.",
+                ephemeral=True,
+            )
+            return
+
+        voice_client: VoiceClient = music_player.get_voice_client_if_exists(
+            interaction.guild_id
+        )
+
+        if voice_client is None:
+            await interaction.send("The playlist is empty.", ephemeral=True)
+            return
+
+        user_voice_channel: VoiceChannel = interaction.user.voice.channel
+
+        if user_voice_channel.id != voice_client.channel.id:
+            await interaction.send(
+                "You must be in the same voice channel as Radio Gholam is.",
+                ephemeral=True,
+            )
+            return
+
+        interation_response = await interaction.send("Please wait...")
+        result = music_player.shuffle(voice_client.guild.id)
+        if result:
+            await interation_response.edit(
+                content=f"The playlist has been **shuffled**."
+            )
+        else:
+            await interation_response.edit(content=f"Operation failed.")
+    except Exception as e:
+        print(e)
+
+
+@client.slash_command(name="pause", description="Pause playback")
+async def pause(interaction: Interaction):
+    try:
+        # Check if the guild is allowed
+        if not is_guild_allowed(interaction.guild_id):
+            await interaction.send(
+                "This command is not allowed on this server.", ephemeral=True
+            )
+            return
+
+        # Check if user is in the same voice channel
+        if interaction.user.voice is None:
+            await interaction.send(
+                "You must be in the target voice channel to use this command.",
+                ephemeral=True,
+            )
+            return
+
+        voice_client: VoiceClient = music_player.get_voice_client_if_exists(
+            interaction.guild_id
+        )
+
+        if voice_client is None:
+            await interaction.send("The playlist is empty.", ephemeral=True)
+            return
+
+        user_voice_channel: VoiceChannel = interaction.user.voice.channel
+
+        if user_voice_channel.id != voice_client.channel.id:
+            await interaction.send(
+                "You must be in the same voice channel as Radio Gholam is.",
+                ephemeral=True,
+            )
+            return
+
+        interation_response = await interaction.send("Please wait...")
+        result = music_player.pause(voice_client)
+        if result:
+            await interation_response.edit(content=f"Playback has been **paused**.")
+        else:
+            await interation_response.edit(content=f"Operation failed.")
+    except Exception as e:
+        print(e)
+
+
+@client.slash_command(name="resume", description="Resume playback")
+async def resume(interaction: Interaction):
+    try:
+        # Check if the guild is allowed
+        if not is_guild_allowed(interaction.guild_id):
+            await interaction.send(
+                "This command is not allowed on this server.", ephemeral=True
+            )
+            return
+
+        # Check if user is in the same voice channel
+        if interaction.user.voice is None:
+            await interaction.send(
+                "You must be in the target voice channel to use this command.",
+                ephemeral=True,
+            )
+            return
+
+        voice_client: VoiceClient = music_player.get_voice_client_if_exists(
+            interaction.guild_id
+        )
+
+        if voice_client is None:
+            await interaction.send("The playlist is empty.", ephemeral=True)
+            return
+
+        user_voice_channel: VoiceChannel = interaction.user.voice.channel
+
+        if user_voice_channel.id != voice_client.channel.id:
+            await interaction.send(
+                "You must be in the same voice channel as Radio Gholam is.",
+                ephemeral=True,
+            )
+            return
+
+        interation_response = await interaction.send("Please wait...")
+        result = music_player.resume(voice_client)
+        if result:
+            await interation_response.edit(content=f"Playback has been **resumed**.")
+        else:
+            await interation_response.edit(content=f"Operation failed.")
+    except Exception as e:
+        print(e)
+
+
+@client.slash_command(name="seek", description="Seek to a specific timestamp")
+async def seek(
+    interaction: Interaction,
+    timestap: str = SlashOption(
+        name="seek", required=True, description="e.g. 130 , 2:10"
+    ),
+):
+    try:
+        # Check if the guild is allowed
+        if not is_guild_allowed(interaction.guild_id):
+            await interaction.send(
+                "This command is not allowed on this server.", ephemeral=True
+            )
+            return
+
+        # Check if user is in the same voice channel
+        if interaction.user.voice is None:
+            await interaction.send(
+                "You must be in the target voice channel to use this command.",
+                ephemeral=True,
+            )
+            return
+
+        voice_client: VoiceClient = music_player.get_voice_client_if_exists(
+            interaction.guild_id
+        )
+
+        if voice_client is None:
+            await interaction.send("The playlist is empty.", ephemeral=True)
+            return
+
+        user_voice_channel: VoiceChannel = interaction.user.voice.channel
+
+        if user_voice_channel.id != voice_client.channel.id:
+            await interaction.send(
+                "You must be in the same voice channel as Radio Gholam is.",
+                ephemeral=True,
+            )
+            return
+
+        interation_response = await interaction.send("Please wait...")
+        result = music_player.seek(voice_client, timestap)
+        if result:
+            await interation_response.edit(content=f"Seeking to **{timestap}**")
+        else:
+            await interation_response.edit(content=f"Operation failed.")
     except Exception as e:
         print(e)
 
