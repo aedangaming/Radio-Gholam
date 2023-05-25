@@ -104,10 +104,10 @@ def play_on_voice_client(voice_client: VoiceClient, input: str, timestamp: int =
             audio_source = FFmpegOpusAudio(
                 input, before_options="-fflags discardcorrupt"
             )
-        voice_client.play(audio_source, after=lambda e: after_playing(voice_client))
+        voice_client.play(audio_source, after=lambda e: decide_next_track(voice_client))
 
 
-def play(voice_client: VoiceClient, input: str, force_title: str = None):
+async def play(voice_client: VoiceClient, input: str, force_title: str = None):
     tags = get_input_tags(input)
     ignore_playlist = True
     if tags:
@@ -120,14 +120,17 @@ def play(voice_client: VoiceClient, input: str, force_title: str = None):
     if ignore_playlist:
         clear_playlist(voice_client.guild.id)
         add_to_playlist(voice_client.guild.id, input, tags)
-        play_on_voice_client(voice_client, input)
+        if voice_client.is_playing():
+            voice_client.stop()  # stopping the player will automatically fire "decide_next_track" function
+        else:
+            await decide_next_track(voice_client)
         return generate_playback_status_text(voice_client.guild.id, force_title)
     else:
         add_to_playlist(voice_client.guild.id, input, tags)
         return f"**{generate_track_info(input, tags, False)}** has been added to the playlist."
 
 
-async def after_playing(voice_client: VoiceClient):
+async def decide_next_track(voice_client: VoiceClient):
     context = voice_contexts[voice_client.guild.id]
     index = context["current_track_index"]
 
@@ -153,13 +156,7 @@ async def after_playing(voice_client: VoiceClient):
 
     # Go for the next track!
     context["next"] = False
-    if context[
-        "new_playlist"
-    ]:  # if it is the first time to play this playlist, do not increase index
-        context["new_playlist"] = False
-    else:
-        index = index + 1
-
+    index = index + 1
     if index >= len(context["playlist"]):  # End of the playlist
         index = 0
         context["current_track_index"] = index

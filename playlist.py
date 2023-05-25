@@ -17,8 +17,7 @@ def initialize_playlist(guild_id: int):
         "next": False,
         "previous": False,
         "playlist": None,
-        "current_track_index": 0,
-        "new_playlist": True,
+        "current_track_index": -1,
     }
 
 

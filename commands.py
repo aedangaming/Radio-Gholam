@@ -50,7 +50,7 @@ async def radio(
             )
             return
 
-        result_message = music_player.play(
+        result_message = await music_player.play(
             voice_client, get_radio_station_url(station), force_title=station
         )
         await interaction_response.edit(content=result_message)
@@ -104,7 +104,7 @@ async def tv(
             )
             return
 
-        result_message = music_player.play(
+        result_message = await music_player.play(
             voice_client, get_tv_station_url(station), force_title=station
         )
         await interaction_response.edit(content=result_message)
@@ -155,7 +155,7 @@ async def play(
             )
             return
 
-        result_message = music_player.play(voice_client, input)
+        result_message = await music_player.play(voice_client, input)
         await interaction_response.edit(content=result_message)
 
     except Exception as e:
@@ -488,7 +488,7 @@ async def resume(interaction: Interaction):
 async def seek(
     interaction: Interaction,
     timestap: str = SlashOption(
-        name="seek", required=True, description="e.g. 130 , 2:10"
+        name="timestamp", required=True, description="e.g. 130 , 2:10"
     ),
 ):
     try:
