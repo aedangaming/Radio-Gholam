@@ -13,7 +13,7 @@ def remove_voice_context(guild_id: int):
 def initialize_playlist(guild_id: int):
     voice_contexts[guild_id] = {
         "seek": None,
-        "loop": "none",
+        "loop": "disabled",
         "next": False,
         "previous": False,
         "playlist": None,
@@ -37,16 +37,12 @@ def add_to_playlist(guild_id: int, item: str, tags):
 
 
 def shuffle_playlist(guild_id: int):
-    try:
-        new_list = []
-        while len(voice_contexts[guild_id]["playlist"]) > 0:
-            rand = random.randint(0, len(voice_contexts[guild_id]["playlist"]) - 1)
-            new_list.append(voice_contexts[guild_id]["playlist"][rand])
-            voice_contexts[guild_id]["playlist"].pop(rand)
-        voice_contexts[guild_id]["playlist"] = new_list
-        return True
-    except Exception:
-        return False
+    new_list = []
+    while len(voice_contexts[guild_id]["playlist"]) > 0:
+        rand = random.randint(0, len(voice_contexts[guild_id]["playlist"]) - 1)
+        new_list.append(voice_contexts[guild_id]["playlist"][rand])
+        voice_contexts[guild_id]["playlist"].pop(rand)
+    voice_contexts[guild_id]["playlist"] = new_list
 
 
 def get_current_track(guild_id: int):

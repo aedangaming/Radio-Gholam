@@ -1,3 +1,4 @@
+import logging
 import asyncio
 import ffmpeg
 from bot import client
@@ -12,49 +13,99 @@ from playlist import (
 )
 
 
+_logger = logging.getLogger("main")
+
+
 def get_voice_client_if_exists(guild_id: int):
     voice_client = None
-    for item in client.voice_clients:
-        if item.channel.guild.id == guild_id:
-            voice_client = item
+    try:
+        for item in client.voice_clients:
+            if item.channel.guild.id == guild_id:
+                voice_client = item
+    except Exception:
+        _logger.exception(
+            f"Exception occurred while searching for VoiceClient with guild id of {guild_id}"
+        )
     return voice_client
 
 
 async def connect_or_get_connected_voice_client(voice_channel: VoiceChannel):
     # Check if there is an active VoiceClient for this guild
+    _logger.debug(
+        f"Getting a connected VoiceClient for '{voice_channel.name}' ({str(voice_channel.id)})"
+    )
     voice_client: VoiceClient = get_voice_client_if_exists(voice_channel.guild.id)
     try:
         # Connect to voice if it is not already connected.
         if not voice_client:
-            voice_client = await voice_channel.connect(timeout=3, reconnect=False)
+            _logger.debug(
+                "VoiceClient does not exist. Making a new VoiceClient connection "
+                + f"to '{voice_channel.name}' ({str(voice_channel.id)})."
+            )
+            voice_client = await voice_channel.connect(timeout=3, reconnect=True)
+            _logger.debug(
+                f"VoiceClient connection established to '{voice_channel.name}' ({str(voice_channel.id)})."
+            )
         if not voice_client.is_connected():
+            _logger.debug(
+                f"VoiceClient is not connected to '{voice_channel.name}' ({str(voice_channel.id)}). "
+                + f"Reconnecting..."
+            )
             try:
-                await voice_client.disconnect()
-                remove_voice_context(voice_channel.guild.id)
-                voice_client = await voice_channel.connect(timeout=3, reconnect=False)
+                await disconnect_voice_client(voice_client)
+                voice_client = await voice_channel.connect(timeout=3, reconnect=True)
+                _logger.debug(
+                    f"VoiceClient connection established to '{voice_channel.name}' ({str(voice_channel.id)})."
+                )
             except Exception:
-                pass
+                _logger.exception(
+                    "Exception occurred while reconnecting the VoiceClient "
+                    + f"to '{voice_channel.name} ({str(voice_channel.id)})"
+                )
     except Exception:
+        _logger.exception(
+            "Exception occurred while preparing a connected VoiceClient "
+            + f"to '{voice_channel.name} ({str(voice_channel.id)})"
+        )
         return None
 
     # Move the bot to the current voice channel
     if voice_channel.id != voice_client.channel.id:
+        _logger.debug(
+            "VoiceClient is connected to another voice channel. Trying to move it "
+            + f"from '{voice_client.channel.name}' ({str(voice_client.channel.id)}) to "
+            + f"'{voice_channel.name}' ({str(voice_channel.id)})"
+        )
         try:
-            await voice_client.disconnect()
-            remove_voice_context(voice_channel.guild.id)
-            voice_client = await voice_channel.connect(timeout=3, reconnect=False)
+            await disconnect_voice_client(voice_client)
+            voice_client = await voice_channel.connect(timeout=3, reconnect=True)
+            _logger.debug(
+                f"VoiceClient connection established to '{voice_channel.name}' ({str(voice_channel.id)})."
+            )
         except Exception:
+            _logger.exception(
+                "Exception occurred while moving the VoiceClient "
+                + f"to '{voice_channel.name} ({str(voice_channel.id)})"
+            )
             return None
 
     return voice_client
 
 
 async def disconnect_voice_client(voice_client: VoiceClient):
-    if voice_client:
-        if voice_client.is_playing():
-            voice_client.stop()
-        await voice_client.disconnect()
-        remove_voice_context(voice_client.guild.id)
+    try:
+        if voice_client:
+            if voice_client.is_playing():
+                voice_client.stop()
+            await voice_client.disconnect()
+            _logger.debug(
+                f"VoiceClient disonnected. guild_id: {str(voice_client.guild.id)}"
+            )
+            remove_voice_context(voice_client.guild.id)
+    except Exception:
+        _logger.exception(
+            f"Exception occurred when disconnecting a voice client. guild_id: {voice_client.guild.id}"
+        )
 
 
 # Resume playing after moving the bot between voice channels
@@ -87,12 +138,20 @@ async def continue_playing_moved_voice_client(
         if not vc.is_playing():
             return
 
+        _logger.info(
+            f"Bot was moved to a new voice channel '{after.channel.name}' ({str(after.channel.id)}) "
+            + f"while playing. Trying to resume the playback..."
+        )
         await asyncio.sleep(1.5)  # wait a moment for it to set in
         vc.pause()
         vc.resume()
 
 
 def play_on_voice_client(voice_client: VoiceClient, input: str, timestamp: int = None):
+    _logger.debug(
+        f"Trying to play '{input}' on '{voice_client.channel.name}' "
+        + f"({str(voice_client.channel.id)}) timestamp: {str(timestamp)}"
+    )
     if voice_client.is_playing():
         voice_client.stop()
     else:
@@ -105,10 +164,17 @@ def play_on_voice_client(voice_client: VoiceClient, input: str, timestamp: int =
                 input, before_options="-fflags discardcorrupt"
             )
         voice_client.play(audio_source, after=lambda e: decide_next_track(voice_client))
+        _logger.debug(
+            f"Started playing '{input}' on '{voice_client.channel.name}' "
+            + f"({str(voice_client.channel.id)}) timestamp: {str(timestamp)}"
+        )
 
 
-async def play(voice_client: VoiceClient, input: str, force_title: str = None):
-    tags = get_input_tags(input)
+async def play(voice_client: VoiceClient, input: str, forced_title: str = None):
+    tags = get_input_tags(input, forced_title)
+    if not tags:
+        return f"Cannot play **{input}** right now."
+
     ignore_playlist = True
     if tags:
         if tags.get("duration"):
@@ -124,127 +190,173 @@ async def play(voice_client: VoiceClient, input: str, force_title: str = None):
             voice_client.stop()  # stopping the player will automatically fire "decide_next_track" function
         else:
             await decide_next_track(voice_client)
-        return generate_playback_status_text(voice_client.guild.id, force_title)
+        _logger.info(
+            f"Started playing '{input}' at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
+            + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)}) forced_title: '{forced_title}'"
+        )
+        return generate_playback_status_text(voice_client.guild.id)
     else:
         add_to_playlist(voice_client.guild.id, input, tags)
+        _logger.info(
+            f"Added '{input}' to the playlist at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
+            + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)}) forced_title: '{forced_title}'"
+        )
         return f"**{generate_track_info(input, tags, False)}** has been added to the playlist."
 
 
 async def decide_next_track(voice_client: VoiceClient):
-    context = voice_contexts[voice_client.guild.id]
-    index = context["current_track_index"]
-
-    if context["seek"]:
-        play_on_voice_client(
-            voice_client, context["playlist"][index]["url"], context["seek"]
+    try:
+        context = voice_contexts[voice_client.guild.id]
+        _logger.debug(
+            "Deciding next track... "
+            + f"guild_id: {str(voice_client.guild.id)} context: {str(context)}"
         )
-        context["seek"] = None
-        return
+        index = context["current_track_index"]
 
-    if context["previous"]:
-        index = index - 1
-        if index < 0:
-            index = len(context["playlist"]) - 1
-        context["current_track_index"] = index
-        context["previous"] = False
-        play_on_voice_client(voice_client, context["playlist"][index]["url"])
-        return
+        if context["seek"] is not None:
+            play_on_voice_client(
+                voice_client, context["playlist"][index]["url"], context["seek"]
+            )
+            context["seek"] = None
+            return
 
-    if context["loop"] == "track" and not context["next"]:  # repeat the same track
-        play_on_voice_client(voice_client, context["playlist"][index]["url"])
-        return
-
-    # Go for the next track!
-    context["next"] = False
-    index = index + 1
-    if index >= len(context["playlist"]):  # End of the playlist
-        index = 0
-        context["current_track_index"] = index
-        if context["loop"] in ["playlist", "track"]:  # repeat the playlist
+        if context["previous"]:
+            index = index - 1
+            if index < 0:
+                index = len(context["playlist"]) - 1
+            context["current_track_index"] = index
+            context["previous"] = False
             play_on_voice_client(voice_client, context["playlist"][index]["url"])
+            return
+
+        if context["loop"] == "track" and not context["next"]:  # repeat the same track
+            play_on_voice_client(voice_client, context["playlist"][index]["url"])
+            return
+
+        # Go for the next track!
+        context["next"] = False
+        index = index + 1
+        if index >= len(context["playlist"]):  # End of the playlist
+            index = 0
+            context["current_track_index"] = index
+            if context["loop"] in ["playlist", "track"]:  # repeat the playlist
+                play_on_voice_client(voice_client, context["playlist"][index]["url"])
+            else:
+                _logger.debug(
+                    "The playlist has come to its end. There is nothing to play next. "
+                    + f"guild_id: {voice_client.guild.id}"
+                )
+                await disconnect_voice_client(voice_client)
         else:
-            await disconnect_voice_client(voice_client)
-    else:
-        context["current_track_index"] = index
-        play_on_voice_client(voice_client, context["playlist"][index]["url"])
+            context["current_track_index"] = index
+            play_on_voice_client(voice_client, context["playlist"][index]["url"])
+    except Exception:
+        _logger.exception(
+            "Exception occurred while deciding for next track "
+            + f"guild_id: {str(voice_client.guild.id)} context: {str(context)}"
+        )
+        raise
+
+
+async def stop(voice_client: VoiceClient):
+    await disconnect_voice_client(voice_client)
+    _logger.info(
+        f"Stopped playing at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
+        + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
+    )
+    return "Stopped."
 
 
 async def next(voice_client: VoiceClient):
-    try:
-        voice_contexts[voice_client.guild.id]["next"] = True
-        voice_client.stop()
-        await asyncio.sleep(0.5)
-        return generate_playback_status_text(voice_client.guild.id)
-    except Exception as e:
-        print(e)
-        return "Stopped."
+    voice_contexts[voice_client.guild.id]["next"] = True
+    voice_client.stop()
+    await asyncio.sleep(0.5)
+    _logger.info(
+        f"Skipped a track at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
+        + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
+    )
+    return generate_playback_status_text(voice_client.guild.id)
 
 
 async def previous(voice_client: VoiceClient):
-    try:
-        voice_contexts[voice_client.guild.id]["previous"] = True
-        voice_client.stop()
-        await asyncio.sleep(0.5)
-        return generate_playback_status_text(voice_client.guild.id)
-    except Exception as e:
-        print(e)
-        return "Stopped."
+    voice_contexts[voice_client.guild.id]["previous"] = True
+    voice_client.stop()
+    await asyncio.sleep(0.5)
+    _logger.info(
+        f"Rewinded a track at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
+        + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
+    )
+    return generate_playback_status_text(voice_client.guild.id)
 
 
 def loop(voice_client: VoiceClient, loop: str):
     context = voice_contexts[voice_client.guild.id]
     context["loop"] = loop
+    _logger.info(
+        f"Loop mode set to '{loop}' at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
+        + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
+    )
+    return f"Loop mode: **{loop}**"
 
 
 def shuffle(voice_client: VoiceClient):
-    return shuffle_playlist(voice_client.guild.id)
+    shuffle_playlist(voice_client.guild.id)
+    _logger.info(
+        f"Shuffled playlist at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
+        + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
+    )
+    return "The playlist has been **shuffled**."
 
 
 def pause(voice_client: VoiceClient):
-    try:
-        voice_client.pause()
-        return True
-    except Exception as e:
-        print(e)
-        return False
+    if voice_client.is_paused():
+        return "Playback is already paused."
+
+    voice_client.pause()
+    _logger.info(
+        f"Paused playing at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
+        + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
+    )
+    return f"Playback has been **paused**."
 
 
 def resume(voice_client: VoiceClient):
-    try:
-        voice_client.resume()
-        return True
-    except Exception as e:
-        print(e)
-        return False
+    if not voice_client.is_paused():
+        return "Playback is already resuming."
 
-
-async def stop(voice_client: VoiceClient):
-    try:
-        await disconnect_voice_client(voice_client)
-    except Exception as e:
-        print(e)
+    voice_client.resume()
+    _logger.info(
+        f"Resumed playing at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
+        + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
+    )
+    return f"Playback has been **resumed**."
 
 
 def seek(voice_client: VoiceClient, timestamp: str):
-    try:
-        converted_timestamp = convert_timestamp(timestamp)
-        if converted_timestamp is None:
-            return None
-        context = voice_contexts[voice_client.guild.id]
-        context["seek"] = converted_timestamp
-        voice_client.stop()
-        return True
-    except Exception as e:
-        print(e)
-        return False
+    converted_timestamp = convert_timestamp(timestamp)
+    if converted_timestamp is None:
+        return f"Invalid timestamp: **{timestamp}**"
+
+    context = voice_contexts[voice_client.guild.id]
+    context["seek"] = converted_timestamp
+    _logger.info(
+        f"Seeking to '{timestamp}' at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
+        + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
+    )
+    voice_client.stop()
+    return f"Seeking to **{timestamp}**"
 
 
-def get_input_tags(input):
+def get_input_tags(input: str, forced_title: str = None):
     try:
         meta = ffmpeg.probe(input)
-    except Exception as e:
-        print(e)
+    except Exception:
+        _logger.warning(
+            f"Exception occurred while probing the input: '{input}' maybe the link is invalid."
+        )
         return None
+
+    _logger.debug(f"Probing for '{input}' finished. result: {meta}")
 
     if not meta["format"]:
         return None
@@ -259,18 +371,26 @@ def get_input_tags(input):
         artist = meta["format"]["tags"].get("artist")
         stream_title = meta["format"]["tags"].get("StreamTitle")
 
-    return {
+    tags = {
         "duration": duration,
         "title": title,
+        "forced_title": forced_title,
         "artist": artist,
         "stream_title": stream_title,
     }
+    _logger.debug(
+        f"Tags generated for '{input}'. forced_title '{forced_title}'. tags: {tags}"
+    )
+    return tags
 
 
 def generate_track_info(url, tags, include_duration: bool):
-    info = f"**{url}**"
+    info = f"{url}"
     if not tags:
         return info
+
+    if tags["forced_title"]:
+        return tags["forced_title"]
 
     title = tags["title"]
     artist = tags["artist"]
@@ -296,23 +416,30 @@ def generate_track_info(url, tags, include_duration: bool):
             + "{:02d}]".format(int(duration) % 60)
         )
 
+    _logger.debug(
+        f"Track info was generated for input: '{url}' tags: {tags} "
+        + f"include_duration: '{include_duration}' result: '{info}'"
+    )
     return info
 
 
-def generate_playback_status_text(guild_id: int, force_title: str = None):
+def generate_playback_status_text(guild_id: int):
+    result = "The playlist is empty."
     current_track = get_current_track(guild_id)
     if current_track:
-        track_info = force_title
-        if not track_info:
-            track_info = generate_track_info(
-                current_track["url"], current_track["tags"], include_duration=True
-            )
+        track_info = generate_track_info(
+            current_track["url"], current_track["tags"], include_duration=True
+        )
         if current_track["tags"]["duration"]:  # it is a single track
-            return f"Now playing  🔊  **{track_info}**"
+            result = f"Now playing  🔊  **{track_info}**"
         else:  # it is a stream
-            return f"Now playing  🔴 LIVE |  **{track_info}**"
+            result = f"Now playing  🔴 LIVE |  **{track_info}**"
 
-    return "The playlist is empty."
+    _logger.debug(
+        f"Generated playback status text. guild_id: {guild_id} "
+        + f"current_track: {current_track} result: '{result}'"
+    )
+    return result
 
 
 def convert_timestamp(timestamp: str):
@@ -353,4 +480,5 @@ def convert_timestamp(timestamp: str):
 
         return result
     except Exception:
+        _logger.exception(f"Failed to convert '{timestamp}' to a valid timestamp.")
         return None
