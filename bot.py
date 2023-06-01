@@ -12,6 +12,7 @@ _logger.debug("Loading .env file...")
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 ALLOWED_SERVERS = json.loads(os.getenv("SERVER_ID"))
+MAX_IDLE_SECONDS = os.getenv("MAX_IDLE_SECONDS")
 
 
 intents = nextcord.Intents.all()

@@ -1,7 +1,11 @@
 import logging
 from bot import client
 from nextcord import Member, VoiceState
-from music_player import continue_playing_moved_voice_client
+from nextcord.ext import tasks
+from music_player import (
+    continue_playing_moved_voice_client,
+    disconnect_idle_voice_clients,
+)
 
 
 _logger = logging.getLogger("main")
@@ -10,6 +14,7 @@ _logger = logging.getLogger("main")
 @client.event
 async def on_ready():
     _logger.info(f"Logged in as {str(client.user)}")
+    cleanup.start()
 
 
 @client.event
@@ -19,3 +24,8 @@ async def on_voice_state_update(
     after: VoiceState,
 ):
     await continue_playing_moved_voice_client(member, before, after)
+
+
+@tasks.loop(seconds=15)
+async def cleanup():
+    await disconnect_idle_voice_clients()

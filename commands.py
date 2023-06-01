@@ -5,6 +5,7 @@ from nextcord import (
     SlashOption,
     VoiceChannel,
     VoiceClient,
+    PartialInteractionMessage,
 )
 from stations import (
     get_radio_station_names,
@@ -27,29 +28,7 @@ async def radio(
     ),
 ):
     try:
-        _logger.info(
-            f"Command 'radio' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-            + f"in '{interaction.guild.name}' ({str(interaction.guild_id)}) "
-            + f"station: '{station}'"
-        )
-        # Check if the guild is allowed
-        if not is_guild_allowed(interaction.guild_id):
-            _logger.debug(
-                f"Guild was not allowed: '{interaction.guild.name}' ({str(interaction.guild_id)})"
-            )
-            await interaction.send(
-                "This command is not allowed on this server.", ephemeral=True
-            )
-            return
-
-        # Check if the user is in a voice channel
-        if interaction.user.voice is None:
-            _logger.debug(
-                f"User was not in a voice channel: '{interaction.user.name}' ({str(interaction.user.id)})"
-            )
-            await interaction.send(
-                "You must be in a voice channel to use this command.", ephemeral=True
-            )
+        if not await initial_checks_for_play_commands(interaction, "radio", station):
             return
 
         interaction_response = await interaction.send("Tuning...")
@@ -76,14 +55,7 @@ async def radio(
         await interaction_response.edit(content=result_message)
 
     except Exception:
-        _logger.exception("Exception occurred in the 'radio' command.")
-        # await music_player.disconnect_voice_client(voice_client)
-        try:
-            await interaction_response.edit(content=f"Operation failed.")
-        except Exception:
-            _logger.exception(
-                "Exception occurred when sending an error message to the user."
-            )
+        await handle_command_exception(interaction, interaction_response, "radio")
 
 
 @client.slash_command(name="tv", description="Play a TV station")
@@ -94,29 +66,7 @@ async def tv(
     ),
 ):
     try:
-        _logger.info(
-            f"Command 'tv' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-            + f"in '{interaction.guild.name}' ({str(interaction.guild_id)}) "
-            + f"station: '{station}'"
-        )
-        # Check if the guild is allowed
-        if not is_guild_allowed(interaction.guild_id):
-            _logger.debug(
-                f"Guild was not allowed: '{interaction.guild.name}' ({str(interaction.guild_id)})"
-            )
-            await interaction.send(
-                "This command is not allowed on this server.", ephemeral=True
-            )
-            return
-
-        # Check if the user is in a voice channel
-        if interaction.user.voice is None:
-            _logger.debug(
-                f"User was not in a voice channel: '{interaction.user.name}' ({str(interaction.user.id)})"
-            )
-            await interaction.send(
-                "You must be in a voice channel to use this command.", ephemeral=True
-            )
+        if not await initial_checks_for_play_commands(interaction, "tv", station):
             return
 
         interaction_response = await interaction.send("Tuning...")
@@ -143,14 +93,7 @@ async def tv(
         await interaction_response.edit(content=result_message)
 
     except Exception:
-        _logger.exception("Exception occurred in the 'tv' command.")
-        # await music_player.disconnect_voice_client(voice_client)
-        try:
-            await interaction_response.edit(content=f"Operation failed.")
-        except Exception:
-            _logger.exception(
-                "Exception occurred when sending an error message to the user."
-            )
+        await handle_command_exception(interaction, interaction_response, "tv")
 
 
 @client.slash_command(name="play", description="Play a link")
@@ -158,29 +101,7 @@ async def play(
     interaction: Interaction, input: str = SlashOption(name="link", required=True)
 ):
     try:
-        _logger.info(
-            f"Command 'play' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-            + f"in '{interaction.guild.name}' ({str(interaction.guild_id)}) "
-            + f"input: '{input}'"
-        )
-        # Check if the guild is allowed
-        if not is_guild_allowed(interaction.guild_id):
-            _logger.debug(
-                f"Guild was not allowed: '{interaction.guild.name}' ({str(interaction.guild_id)})"
-            )
-            await interaction.send(
-                "This command is not allowed on this server.", ephemeral=True
-            )
-            return
-
-        # Check if the user is in a voice channel
-        if interaction.user.voice is None:
-            _logger.debug(
-                f"User was not in a voice channel: '{interaction.user.name}' ({str(interaction.user.id)})"
-            )
-            await interaction.send(
-                "You must be in a voice channel to use this command.", ephemeral=True
-            )
+        if not await initial_checks_for_play_commands(interaction, "play", input):
             return
 
         interaction_response = await interaction.send("Please wait...")
@@ -205,69 +126,17 @@ async def play(
         await interaction_response.edit(content=result_message)
 
     except Exception:
-        _logger.exception("Exception occurred in the 'play' command.")
-        # await music_player.disconnect_voice_client(voice_client)
-        try:
-            await interaction_response.edit(content=f"Operation failed.")
-        except Exception:
-            _logger.exception(
-                "Exception occurred when sending an error message to the user."
-            )
+        await handle_command_exception(interaction, interaction_response, "play")
 
 
 @client.slash_command(name="stop", description="Stop playing")
 async def stop(interaction: Interaction):
     try:
-        _logger.info(
-            f"Command 'stop' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-            + f"in '{interaction.guild.name}' ({str(interaction.guild_id)})"
-        )
-        # Check if the guild is allowed
-        if not is_guild_allowed(interaction.guild_id):
-            _logger.debug(
-                f"Guild was not allowed: '{interaction.guild.name}' ({str(interaction.guild_id)})"
-            )
-            await interaction.send(
-                "This command is not allowed on this server.", ephemeral=True
-            )
-            return
-
-        # Check if the user is in the same voice channel
-        if interaction.user.voice is None:
-            _logger.debug(
-                f"User was not in a voice channel: '{interaction.user.name}' ({str(interaction.user.id)})"
-            )
-            await interaction.send(
-                "You must be in the target voice channel to use this command.",
-                ephemeral=True,
-            )
-            return
-
-        user_voice_channel: VoiceChannel = interaction.user.voice.channel
         voice_client: VoiceClient = music_player.get_voice_client_if_exists(
             interaction.guild_id
         )
 
-        if voice_client is None:
-            _logger.debug(
-                f"No active voice client was found for the guild "
-                + f"'{interaction.guild.name}' ({interaction.guild_id}). "
-                + f"Invalid command: 'stop'"
-            )
-            await interaction.send("The playlist is empty.", ephemeral=True)
-            return
-
-        if user_voice_channel.id != voice_client.channel.id:
-            _logger.debug(
-                f"User was in a different voice channel than the bot. "
-                + f"User: '{interaction.user.name}' ({str(interaction.user.id)}) "
-                + f"is in '{user_voice_channel.name}' ({str(user_voice_channel.id)}) "
-                + f"Bot is in '{voice_client.channel.name}' ({str(voice_client.channel.id)})"
-            )
-            await interaction.send(
-                "You must be in the same voice channel as Radio Gholam is.",
-                ephemeral=True,
-            )
+        if not await initial_command_checks(interaction, voice_client, "stop"):
             return
 
         interaction_response = await interaction.send("Stopping...")
@@ -275,68 +144,22 @@ async def stop(interaction: Interaction):
         await interaction_response.edit(content=result_message)
 
     except Exception:
-        _logger.exception("Exception occurred in the 'stop' command.")
-        try:
-            await interaction_response.edit(content=f"Operation failed.")
-        except Exception:
-            _logger.exception(
-                "Exception occurred when sending an error message to the user."
-            )
+        await handle_command_exception(interaction, interaction_response, "stop")
 
 
 @client.slash_command(name="next", description="Play the next track in the playlist")
 async def next(interaction: Interaction):
     try:
-        _logger.info(
-            f"Command 'next' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-            + f"in '{interaction.guild.name}' ({str(interaction.guild_id)})"
-        )
-        # Check if the guild is allowed
-        if not is_guild_allowed(interaction.guild_id):
-            _logger.debug(
-                f"Guild was not allowed: '{interaction.guild.name}' ({str(interaction.guild_id)})"
-            )
-            await interaction.send(
-                "This command is not allowed on this server.", ephemeral=True
-            )
-            return
-
-        # Check if the user is in the same voice channel
-        if interaction.user.voice is None:
-            _logger.debug(
-                f"User was not in a voice channel: '{interaction.user.name}' ({str(interaction.user.id)})"
-            )
-            await interaction.send(
-                "You must be in the target voice channel to use this command.",
-                ephemeral=True,
-            )
-            return
-
-        user_voice_channel: VoiceChannel = interaction.user.voice.channel
         voice_client: VoiceClient = music_player.get_voice_client_if_exists(
             interaction.guild_id
         )
 
-        if voice_client is None:
-            _logger.debug(
-                f"No active voice client was found for the guild "
-                + f"'{interaction.guild.name}' ({interaction.guild_id}). "
-                + f"Invalid command: 'next'"
-            )
-            await interaction.send("The playlist is empty.", ephemeral=True)
+        if not await initial_command_checks(interaction, voice_client, "next"):
             return
 
-        if user_voice_channel.id != voice_client.channel.id:
-            _logger.debug(
-                f"User was in a different voice channel than the bot. "
-                + f"User: '{interaction.user.name}' ({str(interaction.user.id)}) "
-                + f"is in '{user_voice_channel.name}' ({str(user_voice_channel.id)}) "
-                + f"Bot is in '{voice_client.channel.name}' ({str(voice_client.channel.id)})"
-            )
-            await interaction.send(
-                "You must be in the same voice channel as Radio Gholam is.",
-                ephemeral=True,
-            )
+        if not await is_command_allowed_on_live_streams(
+            interaction, voice_client, "next"
+        ):
             return
 
         interaction_response = await interaction.send("Skipping...")
@@ -344,13 +167,7 @@ async def next(interaction: Interaction):
         await interaction_response.edit(content=result_message)
 
     except Exception:
-        _logger.exception("Exception occurred in the 'next' command.")
-        try:
-            await interaction_response.edit(content=f"Operation failed.")
-        except Exception:
-            _logger.exception(
-                "Exception occurred when sending an error message to the user."
-            )
+        await handle_command_exception(interaction, interaction_response, "next")
 
 
 @client.slash_command(
@@ -358,56 +175,16 @@ async def next(interaction: Interaction):
 )
 async def previous(interaction: Interaction):
     try:
-        _logger.info(
-            f"Command 'previous' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-            + f"in '{interaction.guild.name}' ({str(interaction.guild_id)})"
-        )
-        # Check if the guild is allowed
-        if not is_guild_allowed(interaction.guild_id):
-            _logger.debug(
-                f"Guild was not allowed: '{interaction.guild.name}' ({str(interaction.guild_id)})"
-            )
-            await interaction.send(
-                "This command is not allowed on this server.", ephemeral=True
-            )
-            return
-
-        # Check if the user is in the same voice channel
-        if interaction.user.voice is None:
-            _logger.debug(
-                f"User was not in a voice channel: '{interaction.user.name}' ({str(interaction.user.id)})"
-            )
-            await interaction.send(
-                "You must be in the target voice channel to use this command.",
-                ephemeral=True,
-            )
-            return
-
-        user_voice_channel: VoiceChannel = interaction.user.voice.channel
         voice_client: VoiceClient = music_player.get_voice_client_if_exists(
             interaction.guild_id
         )
 
-        if voice_client is None:
-            _logger.debug(
-                f"No active voice client was found for the guild "
-                + f"'{interaction.guild.name}' ({interaction.guild_id}). "
-                + f"Invalid command: 'previous'"
-            )
-            await interaction.send("The playlist is empty.", ephemeral=True)
+        if not await initial_command_checks(interaction, voice_client, "previous"):
             return
 
-        if user_voice_channel.id != voice_client.channel.id:
-            _logger.debug(
-                f"User was in a different voice channel than the bot. "
-                + f"User: '{interaction.user.name}' ({str(interaction.user.id)}) "
-                + f"is in '{user_voice_channel.name}' ({str(user_voice_channel.id)}) "
-                + f"Bot is in '{voice_client.channel.name}' ({str(voice_client.channel.id)})"
-            )
-            await interaction.send(
-                "You must be in the same voice channel as Radio Gholam is.",
-                ephemeral=True,
-            )
+        if not await is_command_allowed_on_live_streams(
+            interaction, voice_client, "previous"
+        ):
             return
 
         interaction_response = await interaction.send("Rewinding...")
@@ -415,13 +192,7 @@ async def previous(interaction: Interaction):
         await interaction_response.edit(content=result_message)
 
     except Exception:
-        _logger.exception("Exception occurred in the 'previous' command.")
-        try:
-            await interaction_response.edit(content=f"Operation failed.")
-        except Exception:
-            _logger.exception(
-                "Exception occurred when sending an error message to the user."
-            )
+        await handle_command_exception(interaction, interaction_response, "previous")
 
 
 @client.slash_command(name="loop", description="Repeat the playlist or a single track")
@@ -432,56 +203,18 @@ async def loop(
     ),
 ):
     try:
-        _logger.info(
-            f"Command 'loop' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-            + f"in '{interaction.guild.name}' ({str(interaction.guild_id)}) loop: '{loop}'"
-        )
-        # Check if the guild is allowed
-        if not is_guild_allowed(interaction.guild_id):
-            _logger.debug(
-                f"Guild was not allowed: '{interaction.guild.name}' ({str(interaction.guild_id)})"
-            )
-            await interaction.send(
-                "This command is not allowed on this server.", ephemeral=True
-            )
-            return
-
-        # Check if the user is in the same voice channel
-        if interaction.user.voice is None:
-            _logger.debug(
-                f"User was not in a voice channel: '{interaction.user.name}' ({str(interaction.user.id)})"
-            )
-            await interaction.send(
-                "You must be in the target voice channel to use this command.",
-                ephemeral=True,
-            )
-            return
-
-        user_voice_channel: VoiceChannel = interaction.user.voice.channel
         voice_client: VoiceClient = music_player.get_voice_client_if_exists(
             interaction.guild_id
         )
 
-        if voice_client is None:
-            _logger.debug(
-                f"No active voice client was found for the guild "
-                + f"'{interaction.guild.name}' ({interaction.guild_id}). "
-                + f"Invalid command: 'loop'"
-            )
-            await interaction.send("The playlist is empty.", ephemeral=True)
+        if not await initial_command_checks(
+            interaction, voice_client, "loop", f"loop: '{loop}'"
+        ):
             return
 
-        if user_voice_channel.id != voice_client.channel.id:
-            _logger.debug(
-                f"User was in a different voice channel than the bot. "
-                + f"User: '{interaction.user.name}' ({str(interaction.user.id)}) "
-                + f"is in '{user_voice_channel.name}' ({str(user_voice_channel.id)}) "
-                + f"Bot is in '{voice_client.channel.name}' ({str(voice_client.channel.id)})"
-            )
-            await interaction.send(
-                "You must be in the same voice channel as Radio Gholam is.",
-                ephemeral=True,
-            )
+        if not await is_command_allowed_on_live_streams(
+            interaction, voice_client, "loop"
+        ):
             return
 
         interaction_response = await interaction.send("Please wait...")
@@ -489,68 +222,22 @@ async def loop(
         await interaction_response.edit(content=result_message)
 
     except Exception:
-        _logger.exception("Exception occurred in the 'loop' command.")
-        try:
-            await interaction_response.edit(content=f"Operation failed.")
-        except Exception:
-            _logger.exception(
-                "Exception occurred when sending an error message to the user."
-            )
+        await handle_command_exception(interaction, interaction_response, "loop")
 
 
 @client.slash_command(name="shuffle", description="Shuffles current playlist")
 async def shuffle(interaction: Interaction):
     try:
-        _logger.info(
-            f"Command 'shuffle' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-            + f"in '{interaction.guild.name}' ({str(interaction.guild_id)})"
-        )
-        # Check if the guild is allowed
-        if not is_guild_allowed(interaction.guild_id):
-            _logger.debug(
-                f"Guild was not allowed: '{interaction.guild.name}' ({str(interaction.guild_id)})"
-            )
-            await interaction.send(
-                "This command is not allowed on this server.", ephemeral=True
-            )
-            return
-
-        # Check if the user is in the same voice channel
-        if interaction.user.voice is None:
-            _logger.debug(
-                f"User was not in a voice channel: '{interaction.user.name}' ({str(interaction.user.id)})"
-            )
-            await interaction.send(
-                "You must be in the target voice channel to use this command.",
-                ephemeral=True,
-            )
-            return
-
-        user_voice_channel: VoiceChannel = interaction.user.voice.channel
         voice_client: VoiceClient = music_player.get_voice_client_if_exists(
             interaction.guild_id
         )
 
-        if voice_client is None:
-            _logger.debug(
-                f"No active voice client was found for the guild "
-                + f"'{interaction.guild.name}' ({interaction.guild_id}). "
-                + f"Invalid command: 'shuffle'"
-            )
-            await interaction.send("The playlist is empty.", ephemeral=True)
+        if not await initial_command_checks(interaction, voice_client, "shuffle"):
             return
 
-        if user_voice_channel.id != voice_client.channel.id:
-            _logger.debug(
-                f"User was in a different voice channel than the bot. "
-                + f"User: '{interaction.user.name}' ({str(interaction.user.id)}) "
-                + f"is in '{user_voice_channel.name}' ({str(user_voice_channel.id)}) "
-                + f"Bot is in '{voice_client.channel.name}' ({str(voice_client.channel.id)})"
-            )
-            await interaction.send(
-                "You must be in the same voice channel as Radio Gholam is.",
-                ephemeral=True,
-            )
+        if not await is_command_allowed_on_live_streams(
+            interaction, voice_client, "shuffle"
+        ):
             return
 
         interaction_response = await interaction.send("Please wait...")
@@ -558,68 +245,22 @@ async def shuffle(interaction: Interaction):
         await interaction_response.edit(content=result_message)
 
     except Exception:
-        _logger.exception("Exception occurred in the 'shuffle' command.")
-        try:
-            await interaction_response.edit(content=f"Operation failed.")
-        except Exception:
-            _logger.exception(
-                "Exception occurred when sending an error message to the user."
-            )
+        await handle_command_exception(interaction, interaction_response, "shuffle")
 
 
 @client.slash_command(name="pause", description="Pause playback")
 async def pause(interaction: Interaction):
     try:
-        _logger.info(
-            f"Command 'pause' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-            + f"in '{interaction.guild.name}' ({str(interaction.guild_id)})"
-        )
-        # Check if the guild is allowed
-        if not is_guild_allowed(interaction.guild_id):
-            _logger.debug(
-                f"Guild was not allowed: '{interaction.guild.name}' ({str(interaction.guild_id)})"
-            )
-            await interaction.send(
-                "This command is not allowed on this server.", ephemeral=True
-            )
-            return
-
-        # Check if the user is in the same voice channel
-        if interaction.user.voice is None:
-            _logger.debug(
-                f"User was not in a voice channel: '{interaction.user.name}' ({str(interaction.user.id)})"
-            )
-            await interaction.send(
-                "You must be in the target voice channel to use this command.",
-                ephemeral=True,
-            )
-            return
-
-        user_voice_channel: VoiceChannel = interaction.user.voice.channel
         voice_client: VoiceClient = music_player.get_voice_client_if_exists(
             interaction.guild_id
         )
 
-        if voice_client is None:
-            _logger.debug(
-                f"No active voice client was found for the guild "
-                + f"'{interaction.guild.name}' ({interaction.guild_id}). "
-                + f"Invalid command: 'pause'"
-            )
-            await interaction.send("The playlist is empty.", ephemeral=True)
+        if not await initial_command_checks(interaction, voice_client, "pause"):
             return
 
-        if user_voice_channel.id != voice_client.channel.id:
-            _logger.debug(
-                f"User was in a different voice channel than the bot. "
-                + f"User: '{interaction.user.name}' ({str(interaction.user.id)}) "
-                + f"is in '{user_voice_channel.name}' ({str(user_voice_channel.id)}) "
-                + f"Bot is in '{voice_client.channel.name}' ({str(voice_client.channel.id)})"
-            )
-            await interaction.send(
-                "You must be in the same voice channel as Radio Gholam is.",
-                ephemeral=True,
-            )
+        if not await is_command_allowed_on_live_streams(
+            interaction, voice_client, "pause"
+        ):
             return
 
         interaction_response = await interaction.send("Please wait...")
@@ -627,68 +268,22 @@ async def pause(interaction: Interaction):
         await interaction_response.edit(content=result_message)
 
     except Exception:
-        _logger.exception("Exception occurred in the 'pause' command.")
-        try:
-            await interaction_response.edit(content=f"Operation failed.")
-        except Exception:
-            _logger.exception(
-                "Exception occurred when sending an error message to the user."
-            )
+        await handle_command_exception(interaction, interaction_response, "pause")
 
 
 @client.slash_command(name="resume", description="Resume playback")
 async def resume(interaction: Interaction):
     try:
-        _logger.info(
-            f"Command 'resume' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-            + f"in '{interaction.guild.name}' ({str(interaction.guild_id)})"
-        )
-        # Check if the guild is allowed
-        if not is_guild_allowed(interaction.guild_id):
-            _logger.debug(
-                f"Guild was not allowed: '{interaction.guild.name}' ({str(interaction.guild_id)})"
-            )
-            await interaction.send(
-                "This command is not allowed on this server.", ephemeral=True
-            )
-            return
-
-        # Check if the user is in the same voice channel
-        if interaction.user.voice is None:
-            _logger.debug(
-                f"User was not in a voice channel: '{interaction.user.name}' ({str(interaction.user.id)})"
-            )
-            await interaction.send(
-                "You must be in the target voice channel to use this command.",
-                ephemeral=True,
-            )
-            return
-
-        user_voice_channel: VoiceChannel = interaction.user.voice.channel
         voice_client: VoiceClient = music_player.get_voice_client_if_exists(
             interaction.guild_id
         )
 
-        if voice_client is None:
-            _logger.debug(
-                f"No active voice client was found for the guild "
-                + f"'{interaction.guild.name}' ({interaction.guild_id}). "
-                + f"Invalid command: 'resume'"
-            )
-            await interaction.send("The playlist is empty.", ephemeral=True)
+        if not await initial_command_checks(interaction, voice_client, "resume"):
             return
 
-        if user_voice_channel.id != voice_client.channel.id:
-            _logger.debug(
-                f"User was in a different voice channel than the bot. "
-                + f"User: '{interaction.user.name}' ({str(interaction.user.id)}) "
-                + f"is in '{user_voice_channel.name}' ({str(user_voice_channel.id)}) "
-                + f"Bot is in '{voice_client.channel.name}' ({str(voice_client.channel.id)})"
-            )
-            await interaction.send(
-                "You must be in the same voice channel as Radio Gholam is.",
-                ephemeral=True,
-            )
+        if not await is_command_allowed_on_live_streams(
+            interaction, voice_client, "resume"
+        ):
             return
 
         interaction_response = await interaction.send("Please wait...")
@@ -696,13 +291,7 @@ async def resume(interaction: Interaction):
         await interaction_response.edit(content=result_message)
 
     except Exception:
-        _logger.exception("Exception occurred in the 'resume' command.")
-        try:
-            await interaction_response.edit(content=f"Operation failed.")
-        except Exception:
-            _logger.exception(
-                "Exception occurred when sending an error message to the user."
-            )
+        await handle_command_exception(interaction, interaction_response, "resume")
 
 
 @client.slash_command(name="seek", description="Seek to a specific timestamp")
@@ -713,56 +302,18 @@ async def seek(
     ),
 ):
     try:
-        _logger.info(
-            f"Command 'seek' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-            + f"in '{interaction.guild.name}' ({str(interaction.guild_id)}) timestamp: '{timestamp}'"
-        )
-        # Check if the guild is allowed
-        if not is_guild_allowed(interaction.guild_id):
-            _logger.debug(
-                f"Guild was not allowed: '{interaction.guild.name}' ({str(interaction.guild_id)})"
-            )
-            await interaction.send(
-                "This command is not allowed on this server.", ephemeral=True
-            )
-            return
-
-        # Check if the user is in the same voice channel
-        if interaction.user.voice is None:
-            _logger.debug(
-                f"User was not in a voice channel: '{interaction.user.name}' ({str(interaction.user.id)})"
-            )
-            await interaction.send(
-                "You must be in the target voice channel to use this command.",
-                ephemeral=True,
-            )
-            return
-
-        user_voice_channel: VoiceChannel = interaction.user.voice.channel
         voice_client: VoiceClient = music_player.get_voice_client_if_exists(
             interaction.guild_id
         )
 
-        if voice_client is None:
-            _logger.debug(
-                f"No active voice client was found for the guild "
-                + f"'{interaction.guild.name}' ({interaction.guild_id}). "
-                + f"Invalid command: 'seek'"
-            )
-            await interaction.send("The playlist is empty.", ephemeral=True)
+        if not await initial_command_checks(
+            interaction, voice_client, "seek", f"timestamp: '{timestamp}'"
+        ):
             return
 
-        if user_voice_channel.id != voice_client.channel.id:
-            _logger.debug(
-                f"User was in a different voice channel than the bot. "
-                + f"User: '{interaction.user.name}' ({str(interaction.user.id)}) "
-                + f"is in '{user_voice_channel.name}' ({str(user_voice_channel.id)}) "
-                + f"Bot is in '{voice_client.channel.name}' ({str(voice_client.channel.id)})"
-            )
-            await interaction.send(
-                "You must be in the same voice channel as Radio Gholam is.",
-                ephemeral=True,
-            )
+        if not await is_command_allowed_on_live_streams(
+            interaction, voice_client, "seek"
+        ):
             return
 
         interaction_response = await interaction.send("Please wait...")
@@ -770,13 +321,7 @@ async def seek(
         await interaction_response.edit(content=result_message)
 
     except Exception:
-        _logger.exception("Exception occurred in the 'seek' command.")
-        try:
-            await interaction_response.edit(content=f"Operation failed.")
-        except Exception:
-            _logger.exception(
-                "Exception occurred when sending an error message to the user."
-            )
+        await handle_command_exception(interaction, interaction_response, "seek")
 
 
 @client.slash_command(name="about", description="About Radio Gholam")
@@ -789,3 +334,141 @@ async def about(interaction: Interaction):
         await interaction.send(f"Radio Gholam v{VERSION} az **Aedan Gaming**.")
     except Exception:
         _logger.exception("Exception occurred in the 'about' command.")
+
+
+async def initial_checks_for_play_commands(
+    interaction: Interaction,
+    command_name: str,
+    input: str,
+):
+    _logger.info(
+        f"Command '{command_name}' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
+        + f"in '{interaction.guild.name}' ({str(interaction.guild_id)}) input: '{input}'"
+    )
+    # Check if the guild is allowed
+    if not is_guild_allowed(interaction.guild_id):
+        _logger.debug(
+            f"Guild was not allowed: '{interaction.guild.name}' ({str(interaction.guild_id)})"
+        )
+        await interaction.send(
+            "This command is not allowed on this server.", ephemeral=True
+        )
+        return False
+
+    # Check if the user is in a voice channel
+    if interaction.user.voice is None:
+        _logger.debug(
+            f"User was not in a voice channel: '{interaction.user.name}' ({str(interaction.user.id)})"
+        )
+        await interaction.send(
+            "You must be in a voice channel to use this command.", ephemeral=True
+        )
+        return False
+
+    if command_name == "play":
+        if not music_player.validate_input(input):
+            _logger.debug(f"User input was not valid: '{input}'")
+            await interaction.send("Your input is not a valid link.", ephemeral=True)
+            return False
+
+    return True
+
+
+async def initial_command_checks(
+    interaction: Interaction,
+    voice_client: VoiceClient,
+    command_name: str,
+    command_args: str = None,
+):
+    _logger.info(
+        f"Command '{command_name}' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
+        + f"in '{interaction.guild.name}' ({str(interaction.guild_id)}) command_args: {command_args}"
+    )
+    # Check if the guild is allowed
+    if not is_guild_allowed(interaction.guild_id):
+        _logger.debug(
+            f"Guild was not allowed: '{interaction.guild.name}' ({str(interaction.guild_id)})"
+        )
+        await interaction.send(
+            "This command is not allowed on this server.", ephemeral=True
+        )
+        return False
+
+    # Check if the user is in the same voice channel
+    if interaction.user.voice is None:
+        _logger.debug(
+            f"User was not in a voice channel: '{interaction.user.name}' ({str(interaction.user.id)})"
+        )
+        await interaction.send(
+            "You must be in the target voice channel to use this command.",
+            ephemeral=True,
+        )
+        return False
+
+    user_voice_channel: VoiceChannel = interaction.user.voice.channel
+
+    if voice_client is None:
+        _logger.debug(
+            f"No active voice client was found for the guild "
+            + f"'{interaction.guild.name}' ({str(interaction.guild_id)}). "
+            + f"Invalid command: '{command_name}'"
+        )
+        await interaction.send("Play something first!", ephemeral=True)
+        return False
+
+    if user_voice_channel.id != voice_client.channel.id:
+        _logger.debug(
+            f"User was in a different voice channel than the bot. "
+            + f"User: '{interaction.user.name}' ({str(interaction.user.id)}) "
+            + f"is in '{user_voice_channel.name}' ({str(user_voice_channel.id)}) "
+            + f"Bot is in '{voice_client.channel.name}' ({str(voice_client.channel.id)})"
+        )
+        await interaction.send(
+            "You must be in the same voice channel as Radio Gholam is.",
+            ephemeral=True,
+        )
+        return False
+
+    return True
+
+
+async def is_command_allowed_on_live_streams(
+    interaction: Interaction, voice_client: VoiceClient, command_name: str
+):
+    if music_player.is_playlist_empty(voice_client):
+        _logger.debug(
+            f"Cannot perform '{command_name}' command when the playlist is empty. "
+            + f"guild_id: {str(voice_client.guild.id)}"
+        )
+        await interaction.send("Play something first!", ephemeral=True)
+        return False
+
+    if music_player.is_playing_live_stream(voice_client):
+        _logger.debug(
+            f"Cannot perform '{command_name}' command while playing a live stream. "
+            + f"guild_id: {str(voice_client.guild.id)}"
+        )
+        await interaction.send(
+            f"Cannot perform this command while playing a live stream.",
+            ephemeral=True,
+        )
+        return False
+
+    return True
+
+
+async def handle_command_exception(
+    interaction: Interaction,
+    interaction_response: PartialInteractionMessage,
+    command_name: str,
+):
+    _logger.exception(f"Exception occurred in the '{command_name}' command.")
+    try:
+        if interaction_response:
+            await interaction_response.edit(content=f"Operation failed.")
+        else:
+            await interaction.send(content=f"Operation failed.")
+    except Exception:
+        _logger.exception(
+            "Exception occurred when sending an error message to the user."
+        )

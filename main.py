@@ -1,13 +1,16 @@
+import os
 import logging
 from datetime import datetime
 
 
 # Setup logging
 date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+if not os.path.exists("./logs/"):
+    os.makedirs("./logs/")
 
 ## main logs
 log_formatter = logging.Formatter(
-    "%(asctime)s | %(threadName)-12s | %(levelname)-8.8s | %(message)s"
+    "%(asctime)s | %(name)-18.18s | %(threadName)-12s | %(levelname)-8.8s | %(message)s"
 )
 main_logger = logging.getLogger("main")
 main_logger.setLevel(logging.DEBUG)

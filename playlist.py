@@ -1,4 +1,5 @@
 import random
+from datetime import datetime
 
 
 # Store active voice contexts, including playlist, current audio_source and other variables
@@ -18,6 +19,8 @@ def initialize_playlist(guild_id: int):
         "previous": False,
         "playlist": None,
         "current_track_index": -1,
+        "idle": True,
+        "last_interaction_time": datetime.now(),
     }
 
 
@@ -45,8 +48,19 @@ def shuffle_playlist(guild_id: int):
     voice_contexts[guild_id]["playlist"] = new_list
 
 
+def get_playlist_size(guild_id: int):
+    try:
+        playlist = voice_contexts[guild_id]["playlist"]
+        return len(playlist)
+    except Exception:
+        return 0
+
+
 def get_current_track(guild_id: int):
     try:
+        if voice_contexts[guild_id]["idle"]:
+            return None
+
         playlist = voice_contexts[guild_id]["playlist"]
         index = voice_contexts[guild_id]["current_track_index"]
         return playlist[index]
