@@ -180,30 +180,51 @@ async def disconnect_idle_voice_clients():
             )
 
 
-def play_on_voice_client(voice_client: VoiceClient, input: str, timestamp: int = None):
+def play_on_voice_client(
+    voice_client: VoiceClient, playlist_item, seek_timestamp: str = None
+):
+    input = playlist_item["url"]
+    starting_timestamp = playlist_item["starting_timestamp"]
+
     _logger.debug(
-        f"Trying to play '{input}' on '{voice_client.channel.name}' "
-        + f"({str(voice_client.channel.id)}) timestamp: {str(timestamp)}"
+        f"Trying to play {playlist_item} on '{voice_client.channel.name}' "
+        + f"({str(voice_client.channel.id)}) seek_timestamp: {str(seek_timestamp)}"
     )
+
     if voice_client.is_playing():
         _stop_voice_client(voice_client)
-    else:
-        if timestamp:
-            audio_source = FFmpegOpusAudio(
-                input, before_options=f"-fflags discardcorrupt -ss {str(timestamp)}"
-            )
-        else:
-            audio_source = FFmpegOpusAudio(
-                input, before_options="-fflags discardcorrupt"
-            )
-        voice_client.play(audio_source, after=lambda e: decide_next_track(voice_client))
-        _logger.debug(
-            f"Started playing '{input}' on '{voice_client.channel.name}' "
-            + f"({str(voice_client.channel.id)}) timestamp: {str(timestamp)}"
+        return
+
+    final_timestamp = None
+    if seek_timestamp:
+        final_timestamp = seek_timestamp
+        audio_source = FFmpegOpusAudio(
+            input,
+            before_options=f"-fflags discardcorrupt -ss {str(seek_timestamp)}",
         )
+    elif starting_timestamp:
+        final_timestamp = starting_timestamp
+        audio_source = FFmpegOpusAudio(
+            input,
+            before_options=f"-fflags discardcorrupt -ss {str(starting_timestamp)}",
+        )
+        playlist_item["starting_timestamp"] = None
+    else:
+        audio_source = FFmpegOpusAudio(input, before_options="-fflags discardcorrupt")
+
+    voice_client.play(audio_source, after=lambda e: decide_next_track(voice_client))
+    _logger.debug(
+        f"Started playing {playlist_item} on '{voice_client.channel.name}' "
+        + f"({str(voice_client.channel.id)}) effective timestamp: {str(final_timestamp)}"
+    )
 
 
-async def play(voice_client: VoiceClient, input: str, forced_title: str = None):
+async def play(
+    voice_client: VoiceClient,
+    input: str,
+    forced_title: str = None,
+    starting_timestamp: str = None,
+):
     tags = await get_input_tags(input, forced_title)
     if not tags:
         if forced_title:
@@ -211,7 +232,9 @@ async def play(voice_client: VoiceClient, input: str, forced_title: str = None):
         return f"Cannot play **{input}** right now."
 
     ignore_playlist = True
-    if tags.get("duration"):
+    converted_timestamp = None
+
+    if tags.get("duration"):  # It's not a live stream, but a track
         if (
             not is_playing_live_stream(voice_client)
             and get_playlist_size(voice_client.guild.id) > 0
@@ -219,9 +242,14 @@ async def play(voice_client: VoiceClient, input: str, forced_title: str = None):
         ):
             ignore_playlist = False
 
+        if starting_timestamp:
+            converted_timestamp = convert_timestamp(starting_timestamp)
+            if converted_timestamp is None:
+                return f"Invalid timestamp: **{starting_timestamp}**"
+
     if ignore_playlist:
         clear_playlist(voice_client.guild.id)
-        add_to_playlist(voice_client.guild.id, input, tags)
+        add_to_playlist(voice_client.guild.id, input, tags, converted_timestamp)
         if voice_client.is_playing() or voice_client.is_paused():
             _stop_voice_client(
                 voice_client
@@ -235,7 +263,7 @@ async def play(voice_client: VoiceClient, input: str, forced_title: str = None):
         )
         return generate_playback_status_text(voice_client.guild.id)
     else:
-        add_to_playlist(voice_client.guild.id, input, tags)
+        add_to_playlist(voice_client.guild.id, input, tags, converted_timestamp)
         _logger.info(
             f"Added '{input}' to the playlist at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
             + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)}) forced_title: '{forced_title}'"
@@ -255,9 +283,9 @@ async def decide_next_track(voice_client: VoiceClient):
         context["last_interaction_time"] = datetime.now()
         context["idle"] = False
 
-        if context["seek"] is not None:
+        if context["seek"]:
             play_on_voice_client(
-                voice_client, context["playlist"][index]["url"], context["seek"]
+                voice_client, context["playlist"][index], seek_timestamp=context["seek"]
             )
             context["seek"] = None
             context["deciding_next_track"] = False
@@ -269,12 +297,12 @@ async def decide_next_track(voice_client: VoiceClient):
                 index = len(context["playlist"]) - 1
             context["current_track_index"] = index
             context["previous"] = False
-            play_on_voice_client(voice_client, context["playlist"][index]["url"])
+            play_on_voice_client(voice_client, context["playlist"][index])
             context["deciding_next_track"] = False
             return
 
         if context["loop"] == "track" and not context["next"]:  # repeat the same track
-            play_on_voice_client(voice_client, context["playlist"][index]["url"])
+            play_on_voice_client(voice_client, context["playlist"][index])
             context["deciding_next_track"] = False
             return
 
@@ -290,7 +318,7 @@ async def decide_next_track(voice_client: VoiceClient):
             index = 0
             context["current_track_index"] = index
             if context["loop"] in ["playlist", "track"]:  # repeat the playlist
-                play_on_voice_client(voice_client, context["playlist"][index]["url"])
+                play_on_voice_client(voice_client, context["playlist"][index])
             else:
                 _logger.debug(
                     "The playlist has come to its end. There is nothing to play next. "
@@ -300,7 +328,7 @@ async def decide_next_track(voice_client: VoiceClient):
                 context["idle"] = True
         else:
             context["current_track_index"] = index
-            play_on_voice_client(voice_client, context["playlist"][index]["url"])
+            play_on_voice_client(voice_client, context["playlist"][index])
         context["deciding_next_track"] = False
     except Exception:
         _logger.exception(
@@ -597,3 +625,16 @@ def convert_timestamp(timestamp: str):
     except Exception:
         _logger.exception(f"Failed to convert '{timestamp}' to a valid timestamp.")
         return None
+
+
+# Only for debugging purposes
+def log_status():
+    for voice_client in client.voice_clients:
+        try:
+            context = voice_contexts[voice_client.guild.id]
+            _logger.debug(
+                f"Status in {voice_client.guild.id}: is_playing: {voice_client.is_playing()} "
+                + f"context: {context}"
+            )
+        except Exception:
+            pass

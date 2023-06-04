@@ -29,12 +29,14 @@ def clear_playlist(guild_id: int):
     initialize_playlist(guild_id)
 
 
-def add_to_playlist(guild_id: int, item: str, tags):
+def add_to_playlist(guild_id: int, item: str, tags, starting_timestamp: str = None):
     if not voice_contexts.get(guild_id):
         initialize_playlist(guild_id)
     if not voice_contexts[guild_id].get("playlist"):
         voice_contexts[guild_id]["playlist"] = []
-    voice_contexts[guild_id]["playlist"].append({"url": item, "tags": tags})
+    voice_contexts[guild_id]["playlist"].append(
+        {"url": item, "tags": tags, "starting_timestamp": starting_timestamp}
+    )
 
 
 # def remove_from_playlist(guild_id: int, index: int):

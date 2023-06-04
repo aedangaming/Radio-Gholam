@@ -98,10 +98,16 @@ async def tv(
 
 @client.slash_command(name="play", description="Play a link")
 async def play(
-    interaction: Interaction, input: str = SlashOption(name="link", required=True)
+    interaction: Interaction,
+    input: str = SlashOption(name="link", required=True),
+    starting_timestamp: str = SlashOption(
+        name="timestamp", required=False, description="e.g. 130 , 2:10"
+    ),
 ):
     try:
-        if not await initial_checks_for_play_commands(interaction, "play", input):
+        if not await initial_checks_for_play_commands(
+            interaction, "play", input, f"starting_timestamp: {starting_timestamp}"
+        ):
             return
 
         interaction_response = await interaction.send("Please wait...")
@@ -122,7 +128,9 @@ async def play(
             )
             return
 
-        result_message = await music_player.play(voice_client, input)
+        result_message = await music_player.play(
+            voice_client, input, starting_timestamp=starting_timestamp
+        )
         await interaction_response.edit(content=result_message)
 
     except Exception:
@@ -340,10 +348,11 @@ async def initial_checks_for_play_commands(
     interaction: Interaction,
     command_name: str,
     input: str,
+    command_args: str = None,
 ):
     _logger.info(
         f"Command '{command_name}' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-        + f"in '{interaction.guild.name}' ({str(interaction.guild_id)}) input: '{input}'"
+        + f"in '{interaction.guild.name}' ({str(interaction.guild_id)}) input: '{input}' command_args: {command_args}"
     )
     # Check if the guild is allowed
     if not is_guild_allowed(interaction.guild_id):
