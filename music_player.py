@@ -35,7 +35,7 @@ def get_voice_client_if_exists(guild_id: int):
 async def connect_or_get_connected_voice_client(voice_channel: VoiceChannel):
     # Check if there is an active VoiceClient for this guild
     _logger.debug(
-        f"Getting a connected VoiceClient for '{voice_channel.name}' ({str(voice_channel.id)})"
+        f"Getting a connected VoiceClient for '{voice_channel.name}' ({voice_channel.id})"
     )
     voice_client: VoiceClient = get_voice_client_if_exists(voice_channel.guild.id)
     try:
@@ -43,32 +43,32 @@ async def connect_or_get_connected_voice_client(voice_channel: VoiceChannel):
         if not voice_client:
             _logger.debug(
                 "VoiceClient does not exist. Making a new VoiceClient connection "
-                + f"to '{voice_channel.name}' ({str(voice_channel.id)})."
+                + f"to '{voice_channel.name}' ({voice_channel.id})."
             )
             voice_client = await voice_channel.connect(timeout=3, reconnect=True)
             _logger.debug(
-                f"VoiceClient connection established to '{voice_channel.name}' ({str(voice_channel.id)})."
+                f"VoiceClient connection established to '{voice_channel.name}' ({voice_channel.id})."
             )
         if not voice_client.is_connected():
             _logger.debug(
-                f"VoiceClient is not connected to '{voice_channel.name}' ({str(voice_channel.id)}). "
+                f"VoiceClient is not connected to '{voice_channel.name}' ({voice_channel.id}). "
                 + f"Reconnecting..."
             )
             try:
                 await disconnect_voice_client(voice_client)
                 voice_client = await voice_channel.connect(timeout=3, reconnect=True)
                 _logger.debug(
-                    f"VoiceClient connection established to '{voice_channel.name}' ({str(voice_channel.id)})."
+                    f"VoiceClient connection established to '{voice_channel.name}' ({voice_channel.id})."
                 )
             except Exception:
                 _logger.exception(
                     "Exception occurred while reconnecting the VoiceClient "
-                    + f"to '{voice_channel.name} ({str(voice_channel.id)})"
+                    + f"to '{voice_channel.name} ({voice_channel.id})"
                 )
     except Exception:
         _logger.exception(
             "Exception occurred while preparing a connected VoiceClient "
-            + f"to '{voice_channel.name} ({str(voice_channel.id)})"
+            + f"to '{voice_channel.name} ({voice_channel.id})"
         )
         return None
 
@@ -76,19 +76,19 @@ async def connect_or_get_connected_voice_client(voice_channel: VoiceChannel):
     if voice_channel.id != voice_client.channel.id:
         _logger.debug(
             "VoiceClient is connected to another voice channel. Trying to move it "
-            + f"from '{voice_client.channel.name}' ({str(voice_client.channel.id)}) to "
-            + f"'{voice_channel.name}' ({str(voice_channel.id)})"
+            + f"from '{voice_client.channel.name}' ({voice_client.channel.id}) to "
+            + f"'{voice_channel.name}' ({voice_channel.id})"
         )
         try:
             await disconnect_voice_client(voice_client)
             voice_client = await voice_channel.connect(timeout=3, reconnect=True)
             _logger.debug(
-                f"VoiceClient connection established to '{voice_channel.name}' ({str(voice_channel.id)})."
+                f"VoiceClient connection established to '{voice_channel.name}' ({voice_channel.id})."
             )
         except Exception:
             _logger.exception(
                 "Exception occurred while moving the VoiceClient "
-                + f"to '{voice_channel.name} ({str(voice_channel.id)})"
+                + f"to '{voice_channel.name} ({voice_channel.id})"
             )
             return None
 
@@ -105,12 +105,12 @@ async def disconnect_voice_client(voice_client: VoiceClient):
                 _stop_voice_client(voice_client)
             await voice_client.disconnect()
             _logger.debug(
-                f"VoiceClient disonnected. guild_id: {str(voice_client.guild.id)}"
+                f"VoiceClient disonnected. guild_id: {voice_client.guild.id}"
             )
             remove_voice_context(voice_client.guild.id)
     except Exception:
         _logger.exception(
-            f"Exception occurred when disconnecting a voice client. guild_id: {str(voice_client.guild.id)}"
+            f"Exception occurred when disconnecting a voice client. guild_id: {voice_client.guild.id}"
         )
 
 
@@ -150,7 +150,7 @@ async def continue_playing_moved_voice_client(
             return
 
         _logger.info(
-            f"Bot was moved to a new voice channel '{after.channel.name}' ({str(after.channel.id)}) "
+            f"Bot was moved to a new voice channel '{after.channel.name}' ({after.channel.id}) "
             + f"while playing. Trying to resume the playback..."
         )
         await asyncio.sleep(1.5)  # wait a moment for it to set in
@@ -171,12 +171,12 @@ async def disconnect_idle_voice_clients():
                     await disconnect_voice_client(voice_client)
                     _logger.debug(
                         f"Disconnected idle VoiceClient in guild '{voice_client.guild.name}' "
-                        + f"({str(voice_client.guild.id)})"
+                        + f"({voice_client.guild.id})"
                     )
         except Exception:
             _logger.exception(
                 "Exception occurred while checking idle status of a VoiceClient. "
-                + f"guild_id: {str(voice_client.guild.id)}"
+                + f"guild_id: {voice_client.guild.id}"
             )
 
 
@@ -188,7 +188,7 @@ def play_on_voice_client(
 
     _logger.debug(
         f"Trying to play {playlist_item} on '{voice_client.channel.name}' "
-        + f"({str(voice_client.channel.id)}) seek_timestamp: {str(seek_timestamp)}"
+        + f"({voice_client.channel.id}) seek_timestamp: {seek_timestamp}"
     )
 
     if voice_client.is_playing():
@@ -200,13 +200,13 @@ def play_on_voice_client(
         final_timestamp = seek_timestamp
         audio_source = FFmpegOpusAudio(
             input,
-            before_options=f"-fflags discardcorrupt -ss {str(seek_timestamp)}",
+            before_options=f"-fflags discardcorrupt -ss {seek_timestamp}",
         )
     elif starting_timestamp:
         final_timestamp = starting_timestamp
         audio_source = FFmpegOpusAudio(
             input,
-            before_options=f"-fflags discardcorrupt -ss {str(starting_timestamp)}",
+            before_options=f"-fflags discardcorrupt -ss {starting_timestamp}",
         )
         playlist_item["starting_timestamp"] = None
     else:
@@ -215,7 +215,7 @@ def play_on_voice_client(
     voice_client.play(audio_source, after=lambda e: decide_next_track(voice_client))
     _logger.debug(
         f"Started playing {playlist_item} on '{voice_client.channel.name}' "
-        + f"({str(voice_client.channel.id)}) effective timestamp: {str(final_timestamp)}"
+        + f"({voice_client.channel.id}) effective timestamp: {final_timestamp}"
     )
 
 
@@ -258,15 +258,17 @@ async def play(
         else:
             await decide_next_track(voice_client)
         _logger.info(
-            f"Started playing '{input}' at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
-            + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)}) forced_title: '{forced_title}'"
+            f"Started playing '{input}' at '{voice_client.channel.name}' ({voice_client.channel.id}) "
+            + f"in '{voice_client.guild.name}' ({voice_client.guild.id}) forced_title: '{forced_title}'"
         )
+        if not tags.get("duration"):  # Loop live stream so it will restart on failures
+            voice_contexts[voice_client.guild.id]["loop"] = "track"
         return generate_playback_status_text(voice_client.guild.id)
     else:
         add_to_playlist(voice_client.guild.id, input, tags, converted_timestamp)
         _logger.info(
-            f"Added '{input}' to the playlist at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
-            + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)}) forced_title: '{forced_title}'"
+            f"Added '{input}' to the playlist at '{voice_client.channel.name}' ({voice_client.channel.id}) "
+            + f"in '{voice_client.guild.name}' ({voice_client.guild.id}) forced_title: '{forced_title}'"
         )
         return f"**{generate_track_info(input, tags, False)}** has been added to the playlist."
 
@@ -276,7 +278,7 @@ async def decide_next_track(voice_client: VoiceClient):
         context = voice_contexts[voice_client.guild.id]
         _logger.debug(
             "Deciding next track... "
-            + f"guild_id: {str(voice_client.guild.id)} context: {str(context)}"
+            + f"guild_id: {voice_client.guild.id} context: {context}"
         )
         index = context["current_track_index"]
 
@@ -309,7 +311,7 @@ async def decide_next_track(voice_client: VoiceClient):
         # Go for the next track!
         if not context["next"] and index >= 0:
             _logger.debug(
-                f"Track playback has reached to its end. guild_id: {str(voice_client.guild.id)} "
+                f"Track playback has reached to its end. guild_id: {voice_client.guild.id} "
                 + f"context: {context}"
             )
         context["next"] = False
@@ -322,7 +324,7 @@ async def decide_next_track(voice_client: VoiceClient):
             else:
                 _logger.debug(
                     "The playlist has come to its end. There is nothing to play next. "
-                    + f"guild_id: {str(voice_client.guild.id)}"
+                    + f"guild_id: {voice_client.guild.id}"
                 )
                 context["last_interaction_time"] = datetime.now()
                 context["idle"] = True
@@ -333,7 +335,7 @@ async def decide_next_track(voice_client: VoiceClient):
     except Exception:
         _logger.exception(
             "Exception occurred while deciding for next track "
-            + f"guild_id: {str(voice_client.guild.id)} context: {str(context)}"
+            + f"guild_id: {voice_client.guild.id} context: {context}"
         )
         await disconnect_voice_client(voice_client)
 
@@ -351,8 +353,8 @@ async def wait_until_deciding_next_track_is_finished(
 async def stop(voice_client: VoiceClient):
     await disconnect_voice_client(voice_client)
     _logger.info(
-        f"Stopped playing at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
-        + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
+        f"Stopped playing at '{voice_client.channel.name}' ({voice_client.channel.id}) "
+        + f"in '{voice_client.guild.name}' ({voice_client.guild.id})"
     )
     return "Stopped."
 
@@ -362,8 +364,8 @@ async def next(voice_client: VoiceClient):
     _stop_voice_client(voice_client)
     await wait_until_deciding_next_track_is_finished(voice_client, 5)
     _logger.info(
-        f"Skipped a track at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
-        + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
+        f"Skipped a track at '{voice_client.channel.name}' ({voice_client.channel.id}) "
+        + f"in '{voice_client.guild.name}' ({voice_client.guild.id})"
     )
     return generate_playback_status_text(voice_client.guild.id)
 
@@ -373,8 +375,8 @@ async def previous(voice_client: VoiceClient):
     _stop_voice_client(voice_client)
     await wait_until_deciding_next_track_is_finished(voice_client, 5)
     _logger.info(
-        f"Rewinded a track at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
-        + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
+        f"Rewinded a track at '{voice_client.channel.name}' ({voice_client.channel.id}) "
+        + f"in '{voice_client.guild.name}' ({voice_client.guild.id})"
     )
     return generate_playback_status_text(voice_client.guild.id)
 
@@ -383,8 +385,8 @@ def loop(voice_client: VoiceClient, loop: str):
     context = voice_contexts[voice_client.guild.id]
     context["loop"] = loop
     _logger.info(
-        f"Loop mode set to '{loop}' at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
-        + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
+        f"Loop mode set to '{loop}' at '{voice_client.channel.name}' ({voice_client.channel.id}) "
+        + f"in '{voice_client.guild.name}' ({voice_client.guild.id})"
     )
     return f"Loop mode: **{loop}**"
 
@@ -392,8 +394,8 @@ def loop(voice_client: VoiceClient, loop: str):
 def shuffle(voice_client: VoiceClient):
     shuffle_playlist(voice_client.guild.id)
     _logger.info(
-        f"Shuffled playlist at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
-        + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
+        f"Shuffled playlist at '{voice_client.channel.name}' ({voice_client.channel.id}) "
+        + f"in '{voice_client.guild.name}' ({voice_client.guild.id})"
     )
     return "The playlist has been **shuffled**."
 
@@ -404,8 +406,8 @@ def pause(voice_client: VoiceClient):
 
     voice_client.pause()
     _logger.info(
-        f"Paused playing at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
-        + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
+        f"Paused playing at '{voice_client.channel.name}' ({voice_client.channel.id}) "
+        + f"in '{voice_client.guild.name}' ({voice_client.guild.id})"
     )
     return f"Playback has been **paused**."
 
@@ -416,8 +418,8 @@ def resume(voice_client: VoiceClient):
 
     voice_client.resume()
     _logger.info(
-        f"Resumed playing at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
-        + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
+        f"Resumed playing at '{voice_client.channel.name}' ({voice_client.channel.id}) "
+        + f"in '{voice_client.guild.name}' ({voice_client.guild.id})"
     )
     return f"Playback has been **resumed**."
 
@@ -430,8 +432,8 @@ def seek(voice_client: VoiceClient, timestamp: str):
     context = voice_contexts[voice_client.guild.id]
     context["seek"] = converted_timestamp
     _logger.info(
-        f"Seeking to '{timestamp}' at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
-        + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
+        f"Seeking to '{timestamp}' at '{voice_client.channel.name}' ({voice_client.channel.id}) "
+        + f"in '{voice_client.guild.name}' ({voice_client.guild.id})"
     )
     _stop_voice_client(voice_client)
     return f"Seeking to **{timestamp}**"

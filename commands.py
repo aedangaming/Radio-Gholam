@@ -41,8 +41,8 @@ async def radio(
         if not voice_client:
             _logger.debug(
                 f"Could not connect to the voice channel. Maybe the bot's permissions are insufficient. "
-                + f"Voice channel: '{user_voice_channel.name}' ({str(user_voice_channel.id)}) "
-                + f"guild_id: {str(user_voice_channel.guild.id)}"
+                + f"Voice channel: '{user_voice_channel.name}' ({user_voice_channel.id}) "
+                + f"guild_id: {user_voice_channel.guild.id}"
             )
             await interaction_response.edit(
                 "Cannot connect to the voice channel. Check the bot permissions."
@@ -79,8 +79,8 @@ async def tv(
         if not voice_client:
             _logger.debug(
                 f"Could not connect to the voice channel. Maybe the bot's permissions are insufficient. "
-                + f"Voice channel: '{user_voice_channel.name}' ({str(user_voice_channel.id)}) "
-                + f"guild_id: {str(user_voice_channel.guild.id)}"
+                + f"Voice channel: '{user_voice_channel.name}' ({user_voice_channel.id}) "
+                + f"guild_id: {user_voice_channel.guild.id}"
             )
             await interaction_response.edit(
                 "Cannot connect to the voice channel. Check the bot permissions."
@@ -120,8 +120,8 @@ async def play(
         if not voice_client:
             _logger.debug(
                 f"Could not connect to the voice channel. Maybe the bot's permissions are insufficient. "
-                + f"Voice channel: '{user_voice_channel.name}' ({str(user_voice_channel.id)}) "
-                + f"guild_id: {str(user_voice_channel.guild.id)}"
+                + f"Voice channel: '{user_voice_channel.name}' ({user_voice_channel.id}) "
+                + f"guild_id: {user_voice_channel.guild.id}"
             )
             await interaction_response.edit(
                 "Cannot connect to the voice channel. Check the bot permissions."
@@ -336,8 +336,8 @@ async def seek(
 async def about(interaction: Interaction):
     try:
         _logger.info(
-            f"Command 'about' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-            + f"in '{interaction.guild.name}' ({str(interaction.guild_id)})"
+            f"Command 'about' called by '{interaction.user.name}' ({interaction.user.id}) "
+            + f"in '{interaction.guild.name}' ({interaction.guild_id})"
         )
         await interaction.send(f"Radio Gholam v{VERSION} az **Aedan Gaming**.")
     except Exception:
@@ -351,13 +351,13 @@ async def initial_checks_for_play_commands(
     command_args: str = None,
 ):
     _logger.info(
-        f"Command '{command_name}' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-        + f"in '{interaction.guild.name}' ({str(interaction.guild_id)}) input: '{input}' command_args: {command_args}"
+        f"Command '{command_name}' called by '{interaction.user.name}' ({interaction.user.id}) "
+        + f"in '{interaction.guild.name}' ({interaction.guild_id}) input: '{input}' command_args: {command_args}"
     )
     # Check if the guild is allowed
     if not is_guild_allowed(interaction.guild_id):
         _logger.debug(
-            f"Guild was not allowed: '{interaction.guild.name}' ({str(interaction.guild_id)})"
+            f"Guild was not allowed: '{interaction.guild.name}' ({interaction.guild_id})"
         )
         await interaction.send(
             "This command is not allowed on this server.", ephemeral=True
@@ -367,7 +367,7 @@ async def initial_checks_for_play_commands(
     # Check if the user is in a voice channel
     if interaction.user.voice is None:
         _logger.debug(
-            f"User was not in a voice channel: '{interaction.user.name}' ({str(interaction.user.id)})"
+            f"User was not in a voice channel: '{interaction.user.name}' ({interaction.user.id})"
         )
         await interaction.send(
             "You must be in a voice channel to use this command.", ephemeral=True
@@ -390,13 +390,13 @@ async def initial_command_checks(
     command_args: str = None,
 ):
     _logger.info(
-        f"Command '{command_name}' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-        + f"in '{interaction.guild.name}' ({str(interaction.guild_id)}) command_args: {command_args}"
+        f"Command '{command_name}' called by '{interaction.user.name}' ({interaction.user.id}) "
+        + f"in '{interaction.guild.name}' ({interaction.guild_id}) command_args: {command_args}"
     )
     # Check if the guild is allowed
     if not is_guild_allowed(interaction.guild_id):
         _logger.debug(
-            f"Guild was not allowed: '{interaction.guild.name}' ({str(interaction.guild_id)})"
+            f"Guild was not allowed: '{interaction.guild.name}' ({interaction.guild_id})"
         )
         await interaction.send(
             "This command is not allowed on this server.", ephemeral=True
@@ -406,7 +406,7 @@ async def initial_command_checks(
     # Check if the user is in the same voice channel
     if interaction.user.voice is None:
         _logger.debug(
-            f"User was not in a voice channel: '{interaction.user.name}' ({str(interaction.user.id)})"
+            f"User was not in a voice channel: '{interaction.user.name}' ({interaction.user.id})"
         )
         await interaction.send(
             "You must be in the target voice channel to use this command.",
@@ -419,7 +419,7 @@ async def initial_command_checks(
     if voice_client is None:
         _logger.debug(
             f"No active voice client was found for the guild "
-            + f"'{interaction.guild.name}' ({str(interaction.guild_id)}). "
+            + f"'{interaction.guild.name}' ({interaction.guild_id}). "
             + f"Invalid command: '{command_name}'"
         )
         await interaction.send("Play something first!", ephemeral=True)
@@ -428,9 +428,9 @@ async def initial_command_checks(
     if user_voice_channel.id != voice_client.channel.id:
         _logger.debug(
             f"User was in a different voice channel than the bot. "
-            + f"User: '{interaction.user.name}' ({str(interaction.user.id)}) "
-            + f"is in '{user_voice_channel.name}' ({str(user_voice_channel.id)}) "
-            + f"Bot is in '{voice_client.channel.name}' ({str(voice_client.channel.id)})"
+            + f"User: '{interaction.user.name}' ({interaction.user.id}) "
+            + f"is in '{user_voice_channel.name}' ({user_voice_channel.id}) "
+            + f"Bot is in '{voice_client.channel.name}' ({voice_client.channel.id})"
         )
         await interaction.send(
             "You must be in the same voice channel as Radio Gholam is.",
@@ -447,7 +447,7 @@ async def is_command_allowed_on_live_streams(
     if music_player.is_playlist_empty(voice_client):
         _logger.debug(
             f"Cannot perform '{command_name}' command when the playlist is empty. "
-            + f"guild_id: {str(voice_client.guild.id)}"
+            + f"guild_id: {voice_client.guild.id}"
         )
         await interaction.send("Play something first!", ephemeral=True)
         return False
@@ -455,7 +455,7 @@ async def is_command_allowed_on_live_streams(
     if music_player.is_playing_live_stream(voice_client):
         _logger.debug(
             f"Cannot perform '{command_name}' command while playing a live stream. "
-            + f"guild_id: {str(voice_client.guild.id)}"
+            + f"guild_id: {voice_client.guild.id}"
         )
         await interaction.send(
             f"Cannot perform this command while playing a live stream.",
