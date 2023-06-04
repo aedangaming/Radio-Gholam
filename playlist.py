@@ -21,6 +21,7 @@ def initialize_playlist(guild_id: int):
         "current_track_index": -1,
         "idle": True,
         "last_interaction_time": datetime.now(),
+        "deciding_next_track": False,
     }
 
 

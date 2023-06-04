@@ -102,7 +102,7 @@ async def disconnect_voice_client(voice_client: VoiceClient):
     try:
         if voice_client:
             if voice_client.is_playing():
-                voice_client.stop()
+                _stop_voice_client(voice_client)
             await voice_client.disconnect()
             _logger.debug(
                 f"VoiceClient disonnected. guild_id: {str(voice_client.guild.id)}"
@@ -112,6 +112,11 @@ async def disconnect_voice_client(voice_client: VoiceClient):
         _logger.exception(
             f"Exception occurred when disconnecting a voice client. guild_id: {str(voice_client.guild.id)}"
         )
+
+
+def _stop_voice_client(voice_client: VoiceClient):
+    voice_contexts[voice_client.guild.id]["deciding_next_track"] = True
+    voice_client.stop()
 
 
 # Resume playing after moving the bot between voice channels
@@ -181,7 +186,7 @@ def play_on_voice_client(voice_client: VoiceClient, input: str, timestamp: int =
         + f"({str(voice_client.channel.id)}) timestamp: {str(timestamp)}"
     )
     if voice_client.is_playing():
-        voice_client.stop()
+        _stop_voice_client(voice_client)
     else:
         if timestamp:
             audio_source = FFmpegOpusAudio(
@@ -201,6 +206,8 @@ def play_on_voice_client(voice_client: VoiceClient, input: str, timestamp: int =
 async def play(voice_client: VoiceClient, input: str, forced_title: str = None):
     tags = await get_input_tags(input, forced_title)
     if not tags:
+        if forced_title:
+            return f"Cannot play **{forced_title}** right now."
         return f"Cannot play **{input}** right now."
 
     ignore_playlist = True
@@ -216,8 +223,10 @@ async def play(voice_client: VoiceClient, input: str, forced_title: str = None):
         clear_playlist(voice_client.guild.id)
         add_to_playlist(voice_client.guild.id, input, tags)
         if voice_client.is_playing() or voice_client.is_paused():
-            voice_client.stop()  # stopping the player will automatically fire "decide_next_track" function
-            await asyncio.sleep(0.5)
+            _stop_voice_client(
+                voice_client
+            )  # stopping the player will automatically fire "decide_next_track" function
+            await wait_until_deciding_next_track_is_finished(voice_client, 5)
         else:
             await decide_next_track(voice_client)
         _logger.info(
@@ -251,6 +260,7 @@ async def decide_next_track(voice_client: VoiceClient):
                 voice_client, context["playlist"][index]["url"], context["seek"]
             )
             context["seek"] = None
+            context["deciding_next_track"] = False
             return
 
         if context["previous"]:
@@ -260,10 +270,12 @@ async def decide_next_track(voice_client: VoiceClient):
             context["current_track_index"] = index
             context["previous"] = False
             play_on_voice_client(voice_client, context["playlist"][index]["url"])
+            context["deciding_next_track"] = False
             return
 
         if context["loop"] == "track" and not context["next"]:  # repeat the same track
             play_on_voice_client(voice_client, context["playlist"][index]["url"])
+            context["deciding_next_track"] = False
             return
 
         # Go for the next track!
@@ -289,12 +301,23 @@ async def decide_next_track(voice_client: VoiceClient):
         else:
             context["current_track_index"] = index
             play_on_voice_client(voice_client, context["playlist"][index]["url"])
+        context["deciding_next_track"] = False
     except Exception:
         _logger.exception(
             "Exception occurred while deciding for next track "
             + f"guild_id: {str(voice_client.guild.id)} context: {str(context)}"
         )
         await disconnect_voice_client(voice_client)
+
+
+async def wait_until_deciding_next_track_is_finished(
+    voice_client: VoiceClient, timeout: float
+):
+    start = datetime.now()
+    while datetime.now().timestamp() - start.timestamp() < timeout:
+        await asyncio.sleep(0.2)
+        if voice_contexts[voice_client.guild.id]["deciding_next_track"] == False:
+            break
 
 
 async def stop(voice_client: VoiceClient):
@@ -308,8 +331,8 @@ async def stop(voice_client: VoiceClient):
 
 async def next(voice_client: VoiceClient):
     voice_contexts[voice_client.guild.id]["next"] = True
-    voice_client.stop()
-    await asyncio.sleep(0.5)
+    _stop_voice_client(voice_client)
+    await wait_until_deciding_next_track_is_finished(voice_client, 5)
     _logger.info(
         f"Skipped a track at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
         + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
@@ -319,8 +342,8 @@ async def next(voice_client: VoiceClient):
 
 async def previous(voice_client: VoiceClient):
     voice_contexts[voice_client.guild.id]["previous"] = True
-    voice_client.stop()
-    await asyncio.sleep(0.5)
+    _stop_voice_client(voice_client)
+    await wait_until_deciding_next_track_is_finished(voice_client, 5)
     _logger.info(
         f"Rewinded a track at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
         + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
@@ -382,7 +405,7 @@ def seek(voice_client: VoiceClient, timestamp: str):
         f"Seeking to '{timestamp}' at '{voice_client.channel.name}' ({str(voice_client.channel.id)}) "
         + f"in '{voice_client.guild.name}' ({str(voice_client.guild.id)})"
     )
-    voice_client.stop()
+    _stop_voice_client(voice_client)
     return f"Seeking to **{timestamp}**"
 
 
@@ -490,13 +513,13 @@ def generate_track_info(url, tags, include_duration: bool):
     duration = tags["duration"]
 
     if title and artist:
-        info = f"{title} - {artist}"
+        info = f"‎{title} - {artist}"
     elif title:
-        info = f"{title} - [unknown artist]"
+        info = f"‎{title} - [unknown artist]"
     elif artist:
-        info = f"[unknown title] - {artist}"
+        info = f"‎[unknown title] - {artist}"
     elif stream_title:
-        info = f"{stream_title}"
+        info = f"‎{stream_title}"
 
     if include_duration and duration:
         duration = duration.split(".")[0]
