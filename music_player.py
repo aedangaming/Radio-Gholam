@@ -104,9 +104,7 @@ async def disconnect_voice_client(voice_client: VoiceClient):
             if voice_client.is_playing():
                 _stop_voice_client(voice_client)
             await voice_client.disconnect()
-            _logger.debug(
-                f"VoiceClient disonnected. guild_id: {voice_client.guild.id}"
-            )
+            _logger.debug(f"VoiceClient disonnected. guild_id: {voice_client.guild.id}")
             remove_voice_context(voice_client.guild.id)
     except Exception:
         _logger.exception(
@@ -180,9 +178,16 @@ async def disconnect_idle_voice_clients():
             )
 
 
-def play_on_voice_client(
+async def play_on_voice_client(
     voice_client: VoiceClient, playlist_item, seek_timestamp: str = None
 ):
+    if not playlist_item["tags"]:
+        _logger.debug(
+            f"Tags are missing for the playlist_item: {playlist_item} "
+            + "Getting input tags..."
+        )
+        playlist_item["tags"] = await get_input_tags(playlist_item["url"])
+
     input = playlist_item["url"]
     starting_timestamp = playlist_item["starting_timestamp"]
 
@@ -222,24 +227,18 @@ def play_on_voice_client(
 async def play(
     voice_client: VoiceClient,
     input: str,
+    radio_tv: bool = False,
     forced_title: str = None,
     starting_timestamp: str = None,
 ):
     tags = await get_input_tags(input, forced_title)
     if not tags:
-        if forced_title:
-            return f"Cannot play **{forced_title}** right now."
-        return f"Cannot play **{input}** right now."
+        return f"Cannot play **{forced_title if forced_title else input}** right now."
 
     ignore_playlist = True
     converted_timestamp = None
-
-    if tags.get("duration"):  # It's not a live stream, but a track
-        if (
-            not is_playing_live_stream(voice_client)
-            and get_playlist_size(voice_client.guild.id) > 0
-            and not is_idle(voice_client)
-        ):
+    if tags.get("duration"):
+        if not is_playing_radio_or_tv(voice_client) and not is_idle(voice_client):
             ignore_playlist = False
 
         if starting_timestamp:
@@ -248,7 +247,7 @@ async def play(
                 return f"Invalid timestamp: **{starting_timestamp}**"
 
     if ignore_playlist:
-        clear_playlist(voice_client.guild.id)
+        clear_playlist(voice_client.guild.id, radio_tv)
         add_to_playlist(voice_client.guild.id, input, tags, converted_timestamp)
         if voice_client.is_playing() or voice_client.is_paused():
             _stop_voice_client(
@@ -286,7 +285,7 @@ async def decide_next_track(voice_client: VoiceClient):
         context["idle"] = False
 
         if context["seek"]:
-            play_on_voice_client(
+            await play_on_voice_client(
                 voice_client, context["playlist"][index], seek_timestamp=context["seek"]
             )
             context["seek"] = None
@@ -299,12 +298,12 @@ async def decide_next_track(voice_client: VoiceClient):
                 index = len(context["playlist"]) - 1
             context["current_track_index"] = index
             context["previous"] = False
-            play_on_voice_client(voice_client, context["playlist"][index])
+            await play_on_voice_client(voice_client, context["playlist"][index])
             context["deciding_next_track"] = False
             return
 
         if context["loop"] == "track" and not context["next"]:  # repeat the same track
-            play_on_voice_client(voice_client, context["playlist"][index])
+            await play_on_voice_client(voice_client, context["playlist"][index])
             context["deciding_next_track"] = False
             return
 
@@ -320,7 +319,7 @@ async def decide_next_track(voice_client: VoiceClient):
             index = 0
             context["current_track_index"] = index
             if context["loop"] in ["playlist", "track"]:  # repeat the playlist
-                play_on_voice_client(voice_client, context["playlist"][index])
+                await play_on_voice_client(voice_client, context["playlist"][index])
             else:
                 _logger.debug(
                     "The playlist has come to its end. There is nothing to play next. "
@@ -330,7 +329,7 @@ async def decide_next_track(voice_client: VoiceClient):
                 context["idle"] = True
         else:
             context["current_track_index"] = index
-            play_on_voice_client(voice_client, context["playlist"][index])
+            await play_on_voice_client(voice_client, context["playlist"][index])
         context["deciding_next_track"] = False
     except Exception:
         _logger.exception(
@@ -439,15 +438,89 @@ def seek(voice_client: VoiceClient, timestamp: str):
     return f"Seeking to **{timestamp}**"
 
 
+def export_playlist(voice_client: VoiceClient):
+    context = voice_contexts[voice_client.guild.id]
+
+    if not context["playlist"]:
+        return None
+
+    result = ""
+    for item in context["playlist"]:
+        tags = item["tags"]
+        if tags:
+            if tags["title"]:
+                result = result + f"# {tags['title']}"
+                if tags["artist"]:
+                    result = result + f" - {tags['artist']}"
+                result = result + "\n"
+        result = result + f"{item['url']}\n\n"
+
+    _logger.info(
+        f"Exported {len(context['playlist'])} "
+        + f"{'items' if len(context['playlist']) > 1 else 'item'} of the playlist. "
+        + f"guild_id: {voice_client.guild.id}"
+    )
+    debug_result = result.replace("\n", " ")
+    debug_result = debug_result.replace("\r", " ")
+    _logger.debug(
+        f"Exported {len(context['playlist'])} "
+        + f"{'items' if len(context['playlist']) > 1 else 'item'} of the playlist. "
+        + f"guild_id: {voice_client.guild.id} result: {debug_result}"
+    )
+    return result
+
+
+async def import_playlist(voice_client: VoiceClient, input: str):
+    ignore_playlist = is_playing_radio_or_tv(voice_client) or is_idle(voice_client)
+
+    if ignore_playlist:
+        clear_playlist(voice_client.guild.id, radio_tv=False)
+
+    count = 0
+    for item in input.split("\n"):
+        if item.startswith("#") or not validate_input(item):
+            continue
+        add_to_playlist(voice_client.guild.id, item)
+        count = count + 1
+
+    _logger.info(
+        f"Imported {count} {'links' if count > 1 else 'link'} to the playlist. "
+        + f"guild_id: {voice_client.guild.id}"
+    )
+    debug_input = input.replace("\n", " ")
+    debug_input = debug_input.replace("\r", " ")
+    _logger.debug(
+        f"Imported {count} {'links' if count > 1 else 'link'} to the playlist. "
+        + f"guild_id: {voice_client.guild.id} input: {debug_input}"
+    )
+
+    if ignore_playlist:
+        if voice_client.is_playing() or voice_client.is_paused():
+            _stop_voice_client(voice_client)
+            await wait_until_deciding_next_track_is_finished(voice_client, 5)
+        else:
+            await decide_next_track(voice_client)
+
+    return f"Added **{count}** {'links' if count > 1 else 'link'} to the playlist."
+
+
 def is_idle(voice_client: VoiceClient):
     try:
-        return voice_contexts[voice_client.guild.id]["idle"]
+        idle = voice_contexts[voice_client.guild.id]["idle"]
+        if not idle:
+            idle = not (voice_client.is_playing() or voice_client.is_paused())
+        return idle
     except Exception:
         return True
 
 
 def is_playlist_empty(voice_client: VoiceClient):
     return get_playlist_size(voice_client.guild.id) == 0
+
+
+def is_playing_radio_or_tv(voice_client: VoiceClient):
+    context = voice_contexts[voice_client.guild.id]
+    return context["radio/tv"]
 
 
 def is_playing_live_stream(voice_client: VoiceClient):

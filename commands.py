@@ -1,11 +1,14 @@
 import logging
 from bot import client, is_guild_allowed
+import io
 from nextcord import (
     Interaction,
     SlashOption,
     VoiceChannel,
     VoiceClient,
     PartialInteractionMessage,
+    Attachment,
+    File,
 )
 from stations import (
     get_radio_station_names,
@@ -50,7 +53,10 @@ async def radio(
             return
 
         result_message = await music_player.play(
-            voice_client, get_radio_station_url(station), forced_title=station
+            voice_client,
+            get_radio_station_url(station),
+            radio_tv=True,
+            forced_title=station,
         )
         await interaction_response.edit(content=result_message)
 
@@ -88,7 +94,10 @@ async def tv(
             return
 
         result_message = await music_player.play(
-            voice_client, get_tv_station_url(station), forced_title=station
+            voice_client,
+            get_tv_station_url(station),
+            radio_tv=True,
+            forced_title=station,
         )
         await interaction_response.edit(content=result_message)
 
@@ -129,7 +138,7 @@ async def play(
             return
 
         result_message = await music_player.play(
-            voice_client, input, starting_timestamp=starting_timestamp
+            voice_client, input, radio_tv=False, starting_timestamp=starting_timestamp
         )
         await interaction_response.edit(content=result_message)
 
@@ -165,7 +174,7 @@ async def next(interaction: Interaction):
         if not await initial_command_checks(interaction, voice_client, "next"):
             return
 
-        if not await is_command_allowed_on_live_streams(
+        if not await is_command_allowed_on_radio_and_tv_streams(
             interaction, voice_client, "next"
         ):
             return
@@ -190,7 +199,7 @@ async def previous(interaction: Interaction):
         if not await initial_command_checks(interaction, voice_client, "previous"):
             return
 
-        if not await is_command_allowed_on_live_streams(
+        if not await is_command_allowed_on_radio_and_tv_streams(
             interaction, voice_client, "previous"
         ):
             return
@@ -220,7 +229,7 @@ async def loop(
         ):
             return
 
-        if not await is_command_allowed_on_live_streams(
+        if not await is_command_allowed_on_radio_and_tv_streams(
             interaction, voice_client, "loop"
         ):
             return
@@ -243,7 +252,7 @@ async def shuffle(interaction: Interaction):
         if not await initial_command_checks(interaction, voice_client, "shuffle"):
             return
 
-        if not await is_command_allowed_on_live_streams(
+        if not await is_command_allowed_on_radio_and_tv_streams(
             interaction, voice_client, "shuffle"
         ):
             return
@@ -266,7 +275,7 @@ async def pause(interaction: Interaction):
         if not await initial_command_checks(interaction, voice_client, "pause"):
             return
 
-        if not await is_command_allowed_on_live_streams(
+        if not await is_command_allowed_on_radio_and_tv_streams(
             interaction, voice_client, "pause"
         ):
             return
@@ -289,7 +298,7 @@ async def resume(interaction: Interaction):
         if not await initial_command_checks(interaction, voice_client, "resume"):
             return
 
-        if not await is_command_allowed_on_live_streams(
+        if not await is_command_allowed_on_radio_and_tv_streams(
             interaction, voice_client, "resume"
         ):
             return
@@ -319,7 +328,7 @@ async def seek(
         ):
             return
 
-        if not await is_command_allowed_on_live_streams(
+        if not await is_command_allowed_on_radio_and_tv_streams(
             interaction, voice_client, "seek"
         ):
             return
@@ -330,6 +339,71 @@ async def seek(
 
     except Exception:
         await handle_command_exception(interaction, interaction_response, "seek")
+
+
+@client.slash_command(name="export", description="Export current playlist as a file")
+async def export_playlist(interaction: Interaction):
+    try:
+        voice_client: VoiceClient = music_player.get_voice_client_if_exists(
+            interaction.guild_id
+        )
+
+        if not await initial_command_checks(interaction, voice_client, "export"):
+            return
+
+        if not await is_command_allowed_on_radio_and_tv_streams(
+            interaction, voice_client, "export"
+        ):
+            return
+
+        interaction_response = await interaction.send("Please wait...")
+        result = music_player.export_playlist(voice_client)
+        file = File(io.BytesIO(bytes(result, "utf-8")), "playlist.txt")
+        await interaction_response.edit(
+            content="The playlist has been exported.", files=[file]
+        )
+
+    except Exception:
+        await handle_command_exception(interaction, interaction_response, "export")
+
+
+@client.slash_command(name="import", description="Import playlist from a file")
+async def import_playlist(interaction: Interaction, playlist_file: Attachment):
+    try:
+        if not await initial_checks_for_play_commands(
+            interaction,
+            "import",
+            f"attachment: {playlist_file.filename} {playlist_file.size} Bytes",
+        ):
+            return
+
+        interaction_response = await interaction.send("Please wait...")
+
+        user_voice_channel: VoiceChannel = interaction.user.voice.channel
+        voice_client: VoiceClient = (
+            await music_player.connect_or_get_connected_voice_client(user_voice_channel)
+        )
+
+        if not voice_client:
+            _logger.debug(
+                f"Could not connect to the voice channel. Maybe the bot's permissions are insufficient. "
+                + f"Voice channel: '{user_voice_channel.name}' ({user_voice_channel.id}) "
+                + f"guild_id: {user_voice_channel.guild.id}"
+            )
+            await interaction_response.edit(
+                "Cannot connect to the voice channel. Check the bot permissions."
+            )
+            return
+
+        file_contents_bytes = await playlist_file.read()
+        file_contents_str = file_contents_bytes.decode(errors="ignore")
+        result_message = await music_player.import_playlist(
+            voice_client, file_contents_str
+        )
+        await interaction_response.edit(content=result_message)
+
+    except Exception:
+        await handle_command_exception(interaction, interaction_response, "import")
 
 
 @client.slash_command(name="about", description="About Radio Gholam")
@@ -441,7 +515,7 @@ async def initial_command_checks(
     return True
 
 
-async def is_command_allowed_on_live_streams(
+async def is_command_allowed_on_radio_and_tv_streams(
     interaction: Interaction, voice_client: VoiceClient, command_name: str
 ):
     if music_player.is_playlist_empty(voice_client):
@@ -452,13 +526,13 @@ async def is_command_allowed_on_live_streams(
         await interaction.send("Play something first!", ephemeral=True)
         return False
 
-    if music_player.is_playing_live_stream(voice_client):
+    if music_player.is_playing_radio_or_tv(voice_client):
         _logger.debug(
-            f"Cannot perform '{command_name}' command while playing a live stream. "
+            f"Cannot perform '{command_name}' command while playing Radio or a TV station. "
             + f"guild_id: {voice_client.guild.id}"
         )
         await interaction.send(
-            f"Cannot perform this command while playing a live stream.",
+            f"Cannot perform this command while playing Radio or a TV station.",
             ephemeral=True,
         )
         return False
