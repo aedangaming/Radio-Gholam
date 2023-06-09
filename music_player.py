@@ -156,10 +156,12 @@ async def continue_playing_moved_voice_client(
         vc.resume()
 
 
-async def disconnect_idle_voice_clients():
+async def refresh_or_disconnect_idle_voice_clients():
     for voice_client in client.voice_clients:
         try:
-            context = voice_contexts[voice_client.guild.id]
+            context = voice_contexts.get(voice_client.guild.id)
+            if not context:
+                continue
             if context["idle"]:
                 if (
                     datetime.now().timestamp()
@@ -171,6 +173,11 @@ async def disconnect_idle_voice_clients():
                         f"Disconnected idle VoiceClient in guild '{voice_client.guild.name}' "
                         + f"({voice_client.guild.id})"
                     )
+            elif (
+                voice_client.is_playing() and not voice_client.is_paused()
+            ):  # Refresh playback in case ws was disconnected...
+                voice_client.pause()
+                voice_client.resume()
         except Exception:
             _logger.exception(
                 "Exception occurred while checking idle status of a VoiceClient. "

@@ -4,7 +4,7 @@ from nextcord import Member, VoiceState
 from nextcord.ext import tasks
 from music_player import (
     continue_playing_moved_voice_client,
-    disconnect_idle_voice_clients,
+    refresh_or_disconnect_idle_voice_clients,
     log_status,
 )
 
@@ -30,7 +30,7 @@ async def on_voice_state_update(
 
 @tasks.loop(seconds=15)
 async def cleanup():
-    await disconnect_idle_voice_clients()
+    await refresh_or_disconnect_idle_voice_clients()
 
 
 @tasks.loop(seconds=3)
