@@ -1,9 +1,9 @@
 import random
 from datetime import datetime
 
-
 # Store active voice contexts, including playlist, current audio_source and other variables
 voice_contexts = {}
+status_messages = {}
 
 
 def remove_voice_context(guild_id: int):
@@ -11,7 +11,7 @@ def remove_voice_context(guild_id: int):
         voice_contexts.pop(guild_id)
 
 
-def initialize_playlist(guild_id: int):
+def initialize_playlist(guild_id: int, radio_tv: bool = False):
     voice_contexts[guild_id] = {
         "seek": None,
         "loop": "disabled",
@@ -19,21 +19,27 @@ def initialize_playlist(guild_id: int):
         "previous": False,
         "playlist": None,
         "current_track_index": -1,
+        "radio/tv": radio_tv,
         "idle": True,
         "last_interaction_time": datetime.now(),
+        "deciding_next_track": False,
     }
 
 
-def clear_playlist(guild_id: int):
-    initialize_playlist(guild_id)
+def clear_playlist(guild_id: int, radio_tv: bool = False):
+    initialize_playlist(guild_id, radio_tv)
 
 
-def add_to_playlist(guild_id: int, item: str, tags):
+def add_to_playlist(
+    guild_id: int, item: str, tags=None, starting_timestamp: str = None
+):
     if not voice_contexts.get(guild_id):
         initialize_playlist(guild_id)
     if not voice_contexts[guild_id].get("playlist"):
         voice_contexts[guild_id]["playlist"] = []
-    voice_contexts[guild_id]["playlist"].append({"url": item, "tags": tags})
+    voice_contexts[guild_id]["playlist"].append(
+        {"url": item, "tags": tags, "starting_timestamp": starting_timestamp}
+    )
 
 
 # def remove_from_playlist(guild_id: int, index: int):

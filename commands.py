@@ -1,21 +1,24 @@
+import io
 import logging
-from bot import client, is_guild_allowed
 from nextcord import (
     Interaction,
     SlashOption,
     VoiceChannel,
     VoiceClient,
     PartialInteractionMessage,
+    Attachment,
+    File,
 )
+
+import music_player
+from bot import client, is_guild_allowed
 from stations import (
     get_radio_station_names,
     get_radio_station_url,
     get_tv_station_names,
     get_tv_station_url,
 )
-import music_player
 from version import VERSION
-
 
 _logger = logging.getLogger("main")
 
@@ -41,16 +44,20 @@ async def radio(
         if not voice_client:
             _logger.debug(
                 f"Could not connect to the voice channel. Maybe the bot's permissions are insufficient. "
-                + f"Voice channel: '{user_voice_channel.name}' ({str(user_voice_channel.id)}) "
-                + f"guild_id: {str(user_voice_channel.guild.id)}"
+                + f"Voice channel: '{user_voice_channel.name}' ({user_voice_channel.id}) "
+                + f"guild_id: {user_voice_channel.guild.id}"
             )
             await interaction_response.edit(
                 "Cannot connect to the voice channel. Check the bot permissions."
             )
             return
 
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = await music_player.play(
-            voice_client, get_radio_station_url(station), forced_title=station
+            voice_client,
+            get_radio_station_url(station),
+            radio_tv=True,
+            forced_title=station,
         )
         await interaction_response.edit(content=result_message)
 
@@ -79,16 +86,20 @@ async def tv(
         if not voice_client:
             _logger.debug(
                 f"Could not connect to the voice channel. Maybe the bot's permissions are insufficient. "
-                + f"Voice channel: '{user_voice_channel.name}' ({str(user_voice_channel.id)}) "
-                + f"guild_id: {str(user_voice_channel.guild.id)}"
+                + f"Voice channel: '{user_voice_channel.name}' ({user_voice_channel.id}) "
+                + f"guild_id: {user_voice_channel.guild.id}"
             )
             await interaction_response.edit(
                 "Cannot connect to the voice channel. Check the bot permissions."
             )
             return
 
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = await music_player.play(
-            voice_client, get_tv_station_url(station), forced_title=station
+            voice_client,
+            get_tv_station_url(station),
+            radio_tv=True,
+            forced_title=station,
         )
         await interaction_response.edit(content=result_message)
 
@@ -98,10 +109,16 @@ async def tv(
 
 @client.slash_command(name="play", description="Play a link")
 async def play(
-    interaction: Interaction, input: str = SlashOption(name="link", required=True)
+    interaction: Interaction,
+    input: str = SlashOption(name="link", required=True),
+    starting_timestamp: str = SlashOption(
+        name="timestamp", required=False, description="e.g. 130 , 2:10"
+    ),
 ):
     try:
-        if not await initial_checks_for_play_commands(interaction, "play", input):
+        if not await initial_checks_for_play_commands(
+            interaction, "play", input, f"starting_timestamp: {starting_timestamp}"
+        ):
             return
 
         interaction_response = await interaction.send("Please wait...")
@@ -114,15 +131,18 @@ async def play(
         if not voice_client:
             _logger.debug(
                 f"Could not connect to the voice channel. Maybe the bot's permissions are insufficient. "
-                + f"Voice channel: '{user_voice_channel.name}' ({str(user_voice_channel.id)}) "
-                + f"guild_id: {str(user_voice_channel.guild.id)}"
+                + f"Voice channel: '{user_voice_channel.name}' ({user_voice_channel.id}) "
+                + f"guild_id: {user_voice_channel.guild.id}"
             )
             await interaction_response.edit(
                 "Cannot connect to the voice channel. Check the bot permissions."
             )
             return
 
-        result_message = await music_player.play(voice_client, input)
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
+        result_message = await music_player.play(
+            voice_client, input, radio_tv=False, starting_timestamp=starting_timestamp
+        )
         await interaction_response.edit(content=result_message)
 
     except Exception:
@@ -140,6 +160,7 @@ async def stop(interaction: Interaction):
             return
 
         interaction_response = await interaction.send("Stopping...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = await music_player.stop(voice_client)
         await interaction_response.edit(content=result_message)
 
@@ -157,12 +178,13 @@ async def next(interaction: Interaction):
         if not await initial_command_checks(interaction, voice_client, "next"):
             return
 
-        if not await is_command_allowed_on_live_streams(
+        if not await is_command_allowed_on_radio_and_tv_streams(
             interaction, voice_client, "next"
         ):
             return
 
         interaction_response = await interaction.send("Skipping...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = await music_player.next(voice_client)
         await interaction_response.edit(content=result_message)
 
@@ -182,12 +204,13 @@ async def previous(interaction: Interaction):
         if not await initial_command_checks(interaction, voice_client, "previous"):
             return
 
-        if not await is_command_allowed_on_live_streams(
+        if not await is_command_allowed_on_radio_and_tv_streams(
             interaction, voice_client, "previous"
         ):
             return
 
         interaction_response = await interaction.send("Rewinding...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = await music_player.previous(voice_client)
         await interaction_response.edit(content=result_message)
 
@@ -212,12 +235,13 @@ async def loop(
         ):
             return
 
-        if not await is_command_allowed_on_live_streams(
+        if not await is_command_allowed_on_radio_and_tv_streams(
             interaction, voice_client, "loop"
         ):
             return
 
         interaction_response = await interaction.send("Please wait...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = music_player.loop(voice_client, loop)
         await interaction_response.edit(content=result_message)
 
@@ -235,12 +259,13 @@ async def shuffle(interaction: Interaction):
         if not await initial_command_checks(interaction, voice_client, "shuffle"):
             return
 
-        if not await is_command_allowed_on_live_streams(
+        if not await is_command_allowed_on_radio_and_tv_streams(
             interaction, voice_client, "shuffle"
         ):
             return
 
         interaction_response = await interaction.send("Please wait...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = music_player.shuffle(voice_client)
         await interaction_response.edit(content=result_message)
 
@@ -258,12 +283,13 @@ async def pause(interaction: Interaction):
         if not await initial_command_checks(interaction, voice_client, "pause"):
             return
 
-        if not await is_command_allowed_on_live_streams(
+        if not await is_command_allowed_on_radio_and_tv_streams(
             interaction, voice_client, "pause"
         ):
             return
 
         interaction_response = await interaction.send("Please wait...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = music_player.pause(voice_client)
         await interaction_response.edit(content=result_message)
 
@@ -281,12 +307,13 @@ async def resume(interaction: Interaction):
         if not await initial_command_checks(interaction, voice_client, "resume"):
             return
 
-        if not await is_command_allowed_on_live_streams(
+        if not await is_command_allowed_on_radio_and_tv_streams(
             interaction, voice_client, "resume"
         ):
             return
 
         interaction_response = await interaction.send("Please wait...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = music_player.resume(voice_client)
         await interaction_response.edit(content=result_message)
 
@@ -311,12 +338,13 @@ async def seek(
         ):
             return
 
-        if not await is_command_allowed_on_live_streams(
+        if not await is_command_allowed_on_radio_and_tv_streams(
             interaction, voice_client, "seek"
         ):
             return
 
         interaction_response = await interaction.send("Please wait...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = music_player.seek(voice_client, timestamp)
         await interaction_response.edit(content=result_message)
 
@@ -324,12 +352,79 @@ async def seek(
         await handle_command_exception(interaction, interaction_response, "seek")
 
 
+@client.slash_command(name="export", description="Export current playlist as a file")
+async def export_playlist(interaction: Interaction):
+    try:
+        voice_client: VoiceClient = music_player.get_voice_client_if_exists(
+            interaction.guild_id
+        )
+
+        if not await initial_command_checks(interaction, voice_client, "export"):
+            return
+
+        if not await is_command_allowed_on_radio_and_tv_streams(
+            interaction, voice_client, "export"
+        ):
+            return
+
+        interaction_response = await interaction.send("Please wait...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
+        result = music_player.export_playlist(voice_client)
+        file = File(io.BytesIO(bytes(result, "utf-8")), "playlist.txt")
+        await interaction_response.edit(
+            content="The playlist has been exported.", files=[file]
+        )
+
+    except Exception:
+        await handle_command_exception(interaction, interaction_response, "export")
+
+
+@client.slash_command(name="import", description="Import playlist from a file")
+async def import_playlist(interaction: Interaction, playlist_file: Attachment):
+    try:
+        if not await initial_checks_for_play_commands(
+            interaction,
+            "import",
+            f"attachment: {playlist_file.filename} {playlist_file.size} Bytes",
+        ):
+            return
+
+        interaction_response = await interaction.send("Please wait...")
+
+        user_voice_channel: VoiceChannel = interaction.user.voice.channel
+        voice_client: VoiceClient = (
+            await music_player.connect_or_get_connected_voice_client(user_voice_channel)
+        )
+
+        if not voice_client:
+            _logger.debug(
+                f"Could not connect to the voice channel. Maybe the bot's permissions are insufficient. "
+                + f"Voice channel: '{user_voice_channel.name}' ({user_voice_channel.id}) "
+                + f"guild_id: {user_voice_channel.guild.id}"
+            )
+            await interaction_response.edit(
+                "Cannot connect to the voice channel. Check the bot permissions."
+            )
+            return
+
+        file_contents_bytes = await playlist_file.read()
+        file_contents_str = file_contents_bytes.decode(errors="ignore")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
+        result_message = await music_player.import_playlist(
+            voice_client, file_contents_str
+        )
+        await interaction_response.edit(content=result_message)
+
+    except Exception:
+        await handle_command_exception(interaction, interaction_response, "import")
+
+
 @client.slash_command(name="about", description="About Radio Gholam")
 async def about(interaction: Interaction):
     try:
         _logger.info(
-            f"Command 'about' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-            + f"in '{interaction.guild.name}' ({str(interaction.guild_id)})"
+            f"Command 'about' called by '{interaction.user.name}' ({interaction.user.id}) "
+            + f"in '{interaction.guild.name}' ({interaction.guild_id})"
         )
         await interaction.send(f"Radio Gholam v{VERSION} az **Aedan Gaming**.")
     except Exception:
@@ -340,15 +435,16 @@ async def initial_checks_for_play_commands(
     interaction: Interaction,
     command_name: str,
     input: str,
+    command_args: str = None,
 ):
     _logger.info(
-        f"Command '{command_name}' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-        + f"in '{interaction.guild.name}' ({str(interaction.guild_id)}) input: '{input}'"
+        f"Command '{command_name}' called by '{interaction.user.name}' ({interaction.user.id}) "
+        + f"in '{interaction.guild.name}' ({interaction.guild_id}) input: '{input}' command_args: {command_args}"
     )
     # Check if the guild is allowed
     if not is_guild_allowed(interaction.guild_id):
         _logger.debug(
-            f"Guild was not allowed: '{interaction.guild.name}' ({str(interaction.guild_id)})"
+            f"Guild was not allowed: '{interaction.guild.name}' ({interaction.guild_id})"
         )
         await interaction.send(
             "This command is not allowed on this server.", ephemeral=True
@@ -358,7 +454,7 @@ async def initial_checks_for_play_commands(
     # Check if the user is in a voice channel
     if interaction.user.voice is None:
         _logger.debug(
-            f"User was not in a voice channel: '{interaction.user.name}' ({str(interaction.user.id)})"
+            f"User was not in a voice channel: '{interaction.user.name}' ({interaction.user.id})"
         )
         await interaction.send(
             "You must be in a voice channel to use this command.", ephemeral=True
@@ -381,13 +477,13 @@ async def initial_command_checks(
     command_args: str = None,
 ):
     _logger.info(
-        f"Command '{command_name}' called by '{interaction.user.name}' ({str(interaction.user.id)}) "
-        + f"in '{interaction.guild.name}' ({str(interaction.guild_id)}) command_args: {command_args}"
+        f"Command '{command_name}' called by '{interaction.user.name}' ({interaction.user.id}) "
+        + f"in '{interaction.guild.name}' ({interaction.guild_id}) command_args: {command_args}"
     )
     # Check if the guild is allowed
     if not is_guild_allowed(interaction.guild_id):
         _logger.debug(
-            f"Guild was not allowed: '{interaction.guild.name}' ({str(interaction.guild_id)})"
+            f"Guild was not allowed: '{interaction.guild.name}' ({interaction.guild_id})"
         )
         await interaction.send(
             "This command is not allowed on this server.", ephemeral=True
@@ -397,7 +493,7 @@ async def initial_command_checks(
     # Check if the user is in the same voice channel
     if interaction.user.voice is None:
         _logger.debug(
-            f"User was not in a voice channel: '{interaction.user.name}' ({str(interaction.user.id)})"
+            f"User was not in a voice channel: '{interaction.user.name}' ({interaction.user.id})"
         )
         await interaction.send(
             "You must be in the target voice channel to use this command.",
@@ -410,7 +506,7 @@ async def initial_command_checks(
     if voice_client is None:
         _logger.debug(
             f"No active voice client was found for the guild "
-            + f"'{interaction.guild.name}' ({str(interaction.guild_id)}). "
+            + f"'{interaction.guild.name}' ({interaction.guild_id}). "
             + f"Invalid command: '{command_name}'"
         )
         await interaction.send("Play something first!", ephemeral=True)
@@ -419,9 +515,9 @@ async def initial_command_checks(
     if user_voice_channel.id != voice_client.channel.id:
         _logger.debug(
             f"User was in a different voice channel than the bot. "
-            + f"User: '{interaction.user.name}' ({str(interaction.user.id)}) "
-            + f"is in '{user_voice_channel.name}' ({str(user_voice_channel.id)}) "
-            + f"Bot is in '{voice_client.channel.name}' ({str(voice_client.channel.id)})"
+            + f"User: '{interaction.user.name}' ({interaction.user.id}) "
+            + f"is in '{user_voice_channel.name}' ({user_voice_channel.id}) "
+            + f"Bot is in '{voice_client.channel.name}' ({voice_client.channel.id})"
         )
         await interaction.send(
             "You must be in the same voice channel as Radio Gholam is.",
@@ -432,24 +528,24 @@ async def initial_command_checks(
     return True
 
 
-async def is_command_allowed_on_live_streams(
+async def is_command_allowed_on_radio_and_tv_streams(
     interaction: Interaction, voice_client: VoiceClient, command_name: str
 ):
     if music_player.is_playlist_empty(voice_client):
         _logger.debug(
             f"Cannot perform '{command_name}' command when the playlist is empty. "
-            + f"guild_id: {str(voice_client.guild.id)}"
+            + f"guild_id: {voice_client.guild.id}"
         )
         await interaction.send("Play something first!", ephemeral=True)
         return False
 
-    if music_player.is_playing_live_stream(voice_client):
+    if music_player.is_playing_radio_or_tv(voice_client):
         _logger.debug(
-            f"Cannot perform '{command_name}' command while playing a live stream. "
-            + f"guild_id: {str(voice_client.guild.id)}"
+            f"Cannot perform '{command_name}' command while playing Radio or a TV station. "
+            + f"guild_id: {voice_client.guild.id}"
         )
         await interaction.send(
-            f"Cannot perform this command while playing a live stream.",
+            f"Cannot perform this command while playing Radio or a TV station.",
             ephemeral=True,
         )
         return False
