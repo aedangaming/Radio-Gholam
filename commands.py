@@ -1,6 +1,8 @@
-import logging
-from bot import client, is_guild_allowed
 import io
+import logging
+
+import music_player
+from bot import client, is_guild_allowed
 from nextcord import (
     Interaction,
     SlashOption,
@@ -16,9 +18,7 @@ from stations import (
     get_tv_station_names,
     get_tv_station_url,
 )
-import music_player
 from version import VERSION
-
 
 _logger = logging.getLogger("main")
 
@@ -52,6 +52,7 @@ async def radio(
             )
             return
 
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = await music_player.play(
             voice_client,
             get_radio_station_url(station),
@@ -93,6 +94,7 @@ async def tv(
             )
             return
 
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = await music_player.play(
             voice_client,
             get_tv_station_url(station),
@@ -137,6 +139,7 @@ async def play(
             )
             return
 
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = await music_player.play(
             voice_client, input, radio_tv=False, starting_timestamp=starting_timestamp
         )
@@ -157,6 +160,7 @@ async def stop(interaction: Interaction):
             return
 
         interaction_response = await interaction.send("Stopping...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = await music_player.stop(voice_client)
         await interaction_response.edit(content=result_message)
 
@@ -180,6 +184,7 @@ async def next(interaction: Interaction):
             return
 
         interaction_response = await interaction.send("Skipping...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = await music_player.next(voice_client)
         await interaction_response.edit(content=result_message)
 
@@ -205,6 +210,7 @@ async def previous(interaction: Interaction):
             return
 
         interaction_response = await interaction.send("Rewinding...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = await music_player.previous(voice_client)
         await interaction_response.edit(content=result_message)
 
@@ -235,6 +241,7 @@ async def loop(
             return
 
         interaction_response = await interaction.send("Please wait...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = music_player.loop(voice_client, loop)
         await interaction_response.edit(content=result_message)
 
@@ -258,6 +265,7 @@ async def shuffle(interaction: Interaction):
             return
 
         interaction_response = await interaction.send("Please wait...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = music_player.shuffle(voice_client)
         await interaction_response.edit(content=result_message)
 
@@ -281,6 +289,7 @@ async def pause(interaction: Interaction):
             return
 
         interaction_response = await interaction.send("Please wait...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = music_player.pause(voice_client)
         await interaction_response.edit(content=result_message)
 
@@ -304,6 +313,7 @@ async def resume(interaction: Interaction):
             return
 
         interaction_response = await interaction.send("Please wait...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = music_player.resume(voice_client)
         await interaction_response.edit(content=result_message)
 
@@ -334,6 +344,7 @@ async def seek(
             return
 
         interaction_response = await interaction.send("Please wait...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = music_player.seek(voice_client, timestamp)
         await interaction_response.edit(content=result_message)
 
@@ -357,6 +368,7 @@ async def export_playlist(interaction: Interaction):
             return
 
         interaction_response = await interaction.send("Please wait...")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result = music_player.export_playlist(voice_client)
         file = File(io.BytesIO(bytes(result, "utf-8")), "playlist.txt")
         await interaction_response.edit(
@@ -397,6 +409,7 @@ async def import_playlist(interaction: Interaction, playlist_file: Attachment):
 
         file_contents_bytes = await playlist_file.read()
         file_contents_str = file_contents_bytes.decode(errors="ignore")
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
         result_message = await music_player.import_playlist(
             voice_client, file_contents_str
         )

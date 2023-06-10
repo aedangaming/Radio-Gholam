@@ -1,9 +1,9 @@
 import random
 from datetime import datetime
 
-
 # Store active voice contexts, including playlist, current audio_source and other variables
 voice_contexts = {}
+status_messages = {}
 
 
 def remove_voice_context(guild_id: int):

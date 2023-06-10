@@ -1,7 +1,8 @@
-import logging
-import asyncio
 import json
+import asyncio
+import logging
 from datetime import datetime
+
 from bot import client, MAX_IDLE_SECONDS
 from nextcord import VoiceClient, VoiceChannel, VoiceState, Member, FFmpegOpusAudio
 from playlist import (
@@ -13,8 +14,8 @@ from playlist import (
     shuffle_playlist,
     get_playlist_size,
     voice_contexts,
+    status_messages,
 )
-
 
 _logger = logging.getLogger("main")
 
@@ -156,7 +157,7 @@ async def continue_playing_moved_voice_client(
         vc.resume()
 
 
-async def refresh_or_disconnect_idle_voice_clients():
+async def refresh_playback_or_disconnect_idle_voice_clients():
     for voice_client in client.voice_clients:
         try:
             context = voice_contexts.get(voice_client.guild.id)
@@ -175,7 +176,7 @@ async def refresh_or_disconnect_idle_voice_clients():
                     )
             elif (
                 voice_client.is_playing() and not voice_client.is_paused()
-            ):  # Refresh playback in case ws was disconnected...
+            ):  # Refresh playback in case websocket was disconnected...
                 voice_client.pause()
                 voice_client.resume()
         except Exception:
@@ -229,6 +230,7 @@ async def play_on_voice_client(
         f"Started playing {playlist_item} on '{voice_client.channel.name}' "
         + f"({voice_client.channel.id}) effective timestamp: {final_timestamp}"
     )
+    await update_status_text(voice_client)
 
 
 async def play(
@@ -244,7 +246,7 @@ async def play(
 
     ignore_playlist = True
     converted_timestamp = None
-    if tags.get("duration"):
+    if not radio_tv:
         if not is_playing_radio_or_tv(voice_client) and not is_idle(voice_client):
             ignore_playlist = False
 
@@ -269,14 +271,16 @@ async def play(
         )
         if not tags.get("duration"):  # Loop live stream so it will restart on failures
             voice_contexts[voice_client.guild.id]["loop"] = "track"
-        return generate_playback_status_text(voice_client.guild.id)
+        if radio_tv:
+            return f"Tuned to **{forced_title}**!"
+        return f"Playlist initialized with **{generate_track_info(input, tags, include_duration=False)}**."
     else:
         add_to_playlist(voice_client.guild.id, input, tags, converted_timestamp)
         _logger.info(
             f"Added '{input}' to the playlist at '{voice_client.channel.name}' ({voice_client.channel.id}) "
             + f"in '{voice_client.guild.name}' ({voice_client.guild.id}) forced_title: '{forced_title}'"
         )
-        return f"**{generate_track_info(input, tags, False)}** has been added to the playlist."
+        return f"**{generate_track_info(input, tags, include_duration=False)}** has been added to the playlist."
 
 
 async def decide_next_track(voice_client: VoiceClient):
@@ -334,6 +338,7 @@ async def decide_next_track(voice_client: VoiceClient):
                 )
                 context["last_interaction_time"] = datetime.now()
                 context["idle"] = True
+                await update_status_text(voice_client)
         else:
             context["current_track_index"] = index
             await play_on_voice_client(voice_client, context["playlist"][index])
@@ -362,6 +367,7 @@ async def stop(voice_client: VoiceClient):
         f"Stopped playing at '{voice_client.channel.name}' ({voice_client.channel.id}) "
         + f"in '{voice_client.guild.name}' ({voice_client.guild.id})"
     )
+    await update_status_text(voice_client)
     return "Stopped."
 
 
@@ -373,7 +379,7 @@ async def next(voice_client: VoiceClient):
         f"Skipped a track at '{voice_client.channel.name}' ({voice_client.channel.id}) "
         + f"in '{voice_client.guild.name}' ({voice_client.guild.id})"
     )
-    return generate_playback_status_text(voice_client.guild.id)
+    return "Skipped."
 
 
 async def previous(voice_client: VoiceClient):
@@ -384,7 +390,7 @@ async def previous(voice_client: VoiceClient):
         f"Rewinded a track at '{voice_client.channel.name}' ({voice_client.channel.id}) "
         + f"in '{voice_client.guild.name}' ({voice_client.guild.id})"
     )
-    return generate_playback_status_text(voice_client.guild.id)
+    return "Rewinded."
 
 
 def loop(voice_client: VoiceClient, loop: str):
@@ -511,6 +517,52 @@ async def import_playlist(voice_client: VoiceClient, input: str):
     return f"Added **{count}** {'links' if count > 1 else 'link'} to the playlist."
 
 
+def set_active_text_channel(voice_client, channel_id):
+    status_msg = status_messages.get(voice_client.guild.id)
+    if status_msg:
+        status_msg["channel_id"] = channel_id
+    else:
+        status_messages[voice_client.guild.id] = {
+            "last_channel_id": None,
+            "channel_id": channel_id,
+            "message_id": None,
+        }
+
+
+async def update_status_text(voice_client: VoiceClient):
+    status_msg = status_messages.get(voice_client.guild.id)
+    if not status_msg:
+        return
+
+    try:
+        if status_msg["message_id"]:  # Delete previous status message
+            channel = client.get_channel(status_msg["last_channel_id"])
+            message = await channel.fetch_message(status_msg["message_id"])
+            await message.delete()
+            _logger.debug(
+                f"Deleted old playback status message. guild_id: {voice_client.guild.id} "
+                + f"channel: {channel.name} ({channel.id})"
+            )
+
+        channel = client.get_channel(status_msg["channel_id"])
+        status = generate_playback_status_text(voice_client.guild.id)
+        sent_message = await channel.send(status)
+        status_messages[voice_client.guild.id] = {
+            "last_channel_id": channel.id,
+            "channel_id": channel.id,
+            "message_id": sent_message.id,
+        }
+        _logger.debug(
+            f"Sent new playback status message. guild_id: {voice_client.guild.id} "
+            + f"channel: {channel.name} ({channel.id}) message: {status}"
+        )
+    except Exception:
+        _logger.exception(
+            "Exception occured while updating status message. "
+            + f"guild_id: {voice_client.guild.id}"
+        )
+
+
 def is_idle(voice_client: VoiceClient):
     try:
         idle = voice_contexts[voice_client.guild.id]["idle"]
@@ -586,7 +638,14 @@ async def get_input_tags(input: str, forced_title: str = None):
     if not metadata["format"]:
         return None
 
-    duration = metadata["format"].get("duration")
+    duration = None
+    try:
+        duration = float(metadata["format"].get("duration"))
+        if duration == 0:
+            duration = None
+    except Exception:
+        pass
+
     title = None
     artist = None
     stream_title = None
@@ -632,13 +691,12 @@ def generate_track_info(url, tags, include_duration: bool):
         info = f"‎{stream_title}"
 
     if include_duration and duration:
-        duration = duration.split(".")[0]
         info = (
             info
             + "‎ ["  # Left-to-right mark
-            + str(int(int(duration) / 60))
+            + str(int(duration / 60))
             + ":"
-            + "{:02d}]".format(int(duration) % 60)
+            + "{:02d}]".format(int(duration % 60))
         )
 
     _logger.debug(
@@ -649,7 +707,7 @@ def generate_track_info(url, tags, include_duration: bool):
 
 
 def generate_playback_status_text(guild_id: int):
-    result = "Playback has reached the end of the playlist."
+    result = "The playlist is empty."
     current_track = get_current_track(guild_id)
     if current_track:
         track_info = generate_track_info(
