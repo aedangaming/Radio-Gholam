@@ -1,13 +1,13 @@
 import logging
-from bot import client
 from nextcord import Member, VoiceState
 from nextcord.ext import tasks
+
+from bot import client
 from music_player import (
     continue_playing_moved_voice_client,
     refresh_playback_or_disconnect_idle_voice_clients,
     log_status,
 )
-
 
 _logger = logging.getLogger("main")
 

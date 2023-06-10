@@ -2,9 +2,9 @@ import json
 import asyncio
 import logging
 from datetime import datetime
+from nextcord import VoiceClient, VoiceChannel, VoiceState, Member, FFmpegOpusAudio
 
 from bot import client, MAX_IDLE_SECONDS
-from nextcord import VoiceClient, VoiceChannel, VoiceState, Member, FFmpegOpusAudio
 from playlist import (
     initialize_playlist,
     add_to_playlist,
@@ -295,7 +295,7 @@ async def decide_next_track(voice_client: VoiceClient):
         context["last_interaction_time"] = datetime.now()
         context["idle"] = False
 
-        if context["seek"]:
+        if context["seek"] is not None:  # Seek value can be zero
             await play_on_voice_client(
                 voice_client, context["playlist"][index], seek_timestamp=context["seek"]
             )

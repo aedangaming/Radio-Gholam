@@ -1,10 +1,9 @@
-import logging
 import os
 import json
+import logging
 import nextcord
 from dotenv import load_dotenv
 from nextcord.ext import commands
-
 
 _logger = logging.getLogger("main")
 

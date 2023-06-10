@@ -1,8 +1,5 @@
 import io
 import logging
-
-import music_player
-from bot import client, is_guild_allowed
 from nextcord import (
     Interaction,
     SlashOption,
@@ -12,6 +9,9 @@ from nextcord import (
     Attachment,
     File,
 )
+
+import music_player
+from bot import client, is_guild_allowed
 from stations import (
     get_radio_station_names,
     get_radio_station_url,
