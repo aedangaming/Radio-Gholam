@@ -17,6 +17,7 @@ def initialize_playlist(guild_id: int, radio_tv: bool = False):
         "loop": "disabled",
         "next": False,
         "previous": False,
+        "replay": False,
         "playlist": None,
         "current_track_index": -1,
         "radio/tv": radio_tv,

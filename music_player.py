@@ -10,7 +10,6 @@ from playlist import (
     add_to_playlist,
     clear_playlist,
     get_current_track,
-    remove_voice_context,
     shuffle_playlist,
     get_playlist_size,
     voice_contexts,
@@ -96,6 +95,10 @@ async def connect_or_get_connected_voice_client(voice_channel: VoiceChannel):
     if not voice_contexts.get(voice_client.guild.id):
         initialize_playlist(voice_client.guild.id)
 
+    _logger.debug(
+        f"Connected VoiceClient for '{voice_channel.name}' ({voice_channel.id}) is ready."
+    )
+
     return voice_client
 
 
@@ -106,7 +109,6 @@ async def disconnect_voice_client(voice_client: VoiceClient):
                 _stop_voice_client(voice_client)
             await voice_client.disconnect()
             _logger.debug(f"VoiceClient disonnected. guild_id: {voice_client.guild.id}")
-            remove_voice_context(voice_client.guild.id)
     except Exception:
         _logger.exception(
             f"Exception occurred when disconnecting a voice client. guild_id: {voice_client.guild.id}"
@@ -295,6 +297,13 @@ async def decide_next_track(voice_client: VoiceClient):
         context["last_interaction_time"] = datetime.now()
         context["idle"] = False
 
+        if context["replay"]:
+            index = 0
+            await play_on_voice_client(voice_client, context["playlist"][index])
+            context["replay"] = None
+            context["deciding_next_track"] = False
+            return
+
         if context["seek"] is not None:  # Seek value can be zero
             await play_on_voice_client(
                 voice_client, context["playlist"][index], seek_timestamp=context["seek"]
@@ -394,6 +403,9 @@ async def previous(voice_client: VoiceClient):
 
 
 def loop(voice_client: VoiceClient, loop: str):
+    if is_playlist_empty(voice_client.guild.id):
+        return "Play something first!"
+
     context = voice_contexts[voice_client.guild.id]
     context["loop"] = loop
     _logger.info(
@@ -404,6 +416,9 @@ def loop(voice_client: VoiceClient, loop: str):
 
 
 def shuffle(voice_client: VoiceClient):
+    if is_playlist_empty(voice_client.guild.id):
+        return "Play something first!"
+
     shuffle_playlist(voice_client.guild.id)
     _logger.info(
         f"Shuffled playlist at '{voice_client.channel.name}' ({voice_client.channel.id}) "
@@ -449,6 +464,23 @@ def seek(voice_client: VoiceClient, timestamp: str):
     )
     _stop_voice_client(voice_client)
     return f"Seeking to **{timestamp}**"
+
+
+async def replay(voice_client: VoiceClient):
+    if is_playlist_empty(voice_client.guild.id):
+        return "There is nothing to play!"
+    
+    if not is_idle(voice_client):
+        return "The player is already playing!"
+
+    context = voice_contexts[voice_client.guild.id]
+    context["replay"] = True
+    _logger.info(
+        f"Replayed playlist at '{voice_client.channel.name}' ({voice_client.channel.id}) "
+        + f"in '{voice_client.guild.name}' ({voice_client.guild.id})"
+    )
+    await decide_next_track(voice_client)
+    return "Replaying last playlist."
 
 
 def export_playlist(voice_client: VoiceClient):
@@ -541,7 +573,7 @@ async def update_status_text(voice_client: VoiceClient):
             await message.delete()
             _logger.debug(
                 f"Deleted old playback status message. guild_id: {voice_client.guild.id} "
-                + f"channel: {channel.name} ({channel.id})"
+                + f"channel: '{channel.name}' ({channel.id})"
             )
 
         channel = client.get_channel(status_msg["channel_id"])
@@ -554,7 +586,7 @@ async def update_status_text(voice_client: VoiceClient):
         }
         _logger.debug(
             f"Sent new playback status message. guild_id: {voice_client.guild.id} "
-            + f"channel: {channel.name} ({channel.id}) message: {status}"
+            + f"channel: '{channel.name}' ({channel.id}) message: '{status}'"
         )
     except Exception:
         _logger.exception(
@@ -573,8 +605,8 @@ def is_idle(voice_client: VoiceClient):
         return True
 
 
-def is_playlist_empty(voice_client: VoiceClient):
-    return get_playlist_size(voice_client.guild.id) == 0
+def is_playlist_empty(guild_id: int):
+    return get_playlist_size(guild_id) == 0
 
 
 def is_playing_radio_or_tv(voice_client: VoiceClient):
@@ -616,6 +648,8 @@ async def get_input_tags(input: str, forced_title: str = None):
             "json",
             "-show_format",
             "-show_streams",
+            "-timeout",
+            "5000000",  # 5 seconds
             input,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
