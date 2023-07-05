@@ -295,6 +295,13 @@ async def decide_next_track(voice_client: VoiceClient):
         index = context["current_track_index"]
 
         context["last_interaction_time"] = datetime.now()
+
+        if context["stop"]:
+            context["stop"] = False
+            context["idle"] = True
+            context["deciding_next_track"] = False
+            return
+
         context["idle"] = False
 
         if context["replay"]:
@@ -371,7 +378,11 @@ async def wait_until_deciding_next_track_is_finished(
 
 
 async def stop(voice_client: VoiceClient):
+    context = voice_contexts.get(voice_client.guild.id)
+    if context:
+        context["stop"] = True
     await disconnect_voice_client(voice_client)
+
     _logger.info(
         f"Stopped playing at '{voice_client.channel.name}' ({voice_client.channel.id}) "
         + f"in '{voice_client.guild.name}' ({voice_client.guild.id})"
@@ -469,7 +480,7 @@ def seek(voice_client: VoiceClient, timestamp: str):
 async def replay(voice_client: VoiceClient):
     if is_playlist_empty(voice_client.guild.id):
         return "There is nothing to play!"
-    
+
     if not is_idle(voice_client):
         return "The player is already playing!"
 
