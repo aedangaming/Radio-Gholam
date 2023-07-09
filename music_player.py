@@ -1,10 +1,13 @@
 import json
+import socket
 import asyncio
 import logging
 from datetime import datetime
+from urllib.parse import urlparse
+from geoip_interface import lookup_country_code
 from nextcord import VoiceClient, VoiceChannel, VoiceState, Member, FFmpegOpusAudio
 
-from bot import client, MAX_IDLE_SECONDS
+from bot import client, MAX_IDLE_SECONDS, PREFERRED_PROXIES
 from playlist import (
     initialize_playlist,
     add_to_playlist,
@@ -213,19 +216,16 @@ async def play_on_voice_client(
     final_timestamp = None
     if seek_timestamp:
         final_timestamp = seek_timestamp
-        audio_source = FFmpegOpusAudio(
-            input,
-            before_options=f"-fflags discardcorrupt -ss {seek_timestamp}",
-        )
     elif starting_timestamp:
         final_timestamp = starting_timestamp
-        audio_source = FFmpegOpusAudio(
-            input,
-            before_options=f"-fflags discardcorrupt -ss {starting_timestamp}",
-        )
         playlist_item["starting_timestamp"] = None
-    else:
-        audio_source = FFmpegOpusAudio(input, before_options="-fflags discardcorrupt")
+
+    audio_source = FFmpegOpusAudio(
+        input,
+        before_options=f"-fflags discardcorrupt"
+        + f"{_generate_ffmpeg_http_proxy_option(input)}"
+        + f"{_generate_ffmpeg_start_timestamp_option(final_timestamp)}",
+    )
 
     voice_client.play(audio_source, after=lambda e: decide_next_track(voice_client))
     _logger.debug(
@@ -233,6 +233,27 @@ async def play_on_voice_client(
         + f"({voice_client.channel.id}) effective timestamp: {final_timestamp}"
     )
     await update_status_text(voice_client)
+
+
+def _generate_ffmpeg_start_timestamp_option(timestamp: str):
+    if timestamp is None:
+        return ""
+    return f" -ss {timestamp}"
+
+
+def _generate_ffmpeg_http_proxy_option(link: str):
+    parsed_url = urlparse(link)
+    host = parsed_url.netloc.split(":")[0]
+    ip = socket.gethostbyname(host)
+    country_code = lookup_country_code(ip)
+    _logger.debug(f"Host country detected as '{country_code}' for '{link}'")
+    proxy_url = PREFERRED_PROXIES.get(country_code)
+
+    if proxy_url is None:
+        return ""
+
+    _logger.debug(f"Using '{proxy_url}' as a proxy to play '{link}'")
+    return f" -http_proxy {proxy_url}"
 
 
 async def play(

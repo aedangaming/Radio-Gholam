@@ -12,6 +12,7 @@ load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 ALLOWED_SERVERS = json.loads(os.getenv("SERVER_ID"))
 MAX_IDLE_SECONDS = float(os.getenv("MAX_IDLE_SECONDS"))
+PREFERRED_PROXIES = json.loads(os.getenv("PREFERRED_PROXIES"))
 
 
 intents = nextcord.Intents.all()
