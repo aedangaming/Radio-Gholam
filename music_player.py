@@ -600,22 +600,27 @@ async def update_status_text(voice_client: VoiceClient):
 
     try:
         if status_msg["message_id"]:  # Delete previous status message
-            channel = client.get_channel(status_msg["last_channel_id"])
-            message = await channel.fetch_message(status_msg["message_id"])
-            await message.delete()
-            _logger.debug(
-                f"Deleted old playback status message. guild_id: {voice_client.guild.id} "
-                + f"channel: '{channel.name}' ({channel.id})"
-            )
+            try:
+                channel = client.get_channel(status_msg["last_channel_id"])
+                message = await channel.fetch_message(status_msg["message_id"])
+                await message.delete()
+                status_messages[voice_client.guild.id]["message_id"] = None
+                _logger.debug(
+                    f"Deleted old playback status message. guild_id: {voice_client.guild.id} "
+                    + f"channel: '{channel.name}' ({channel.id})"
+                )
+            except Exception:
+                _logger.exception(
+                    "Exception occured while deleting previous status message. "
+                    + f"guild_id: {voice_client.guild.id}"
+                )
 
+        # Send new status message
         channel = client.get_channel(status_msg["channel_id"])
         status = generate_playback_status_text(voice_client.guild.id)
         sent_message = await channel.send(status)
-        status_messages[voice_client.guild.id] = {
-            "last_channel_id": channel.id,
-            "channel_id": channel.id,
-            "message_id": sent_message.id,
-        }
+        status_messages[voice_client.guild.id]["last_channel_id"] = channel.id
+        status_messages[voice_client.guild.id]["message_id"] = sent_message.id
         _logger.debug(
             f"Sent new playback status message. guild_id: {voice_client.guild.id} "
             + f"channel: '{channel.name}' ({channel.id}) message: '{status}'"
@@ -672,20 +677,41 @@ def validate_input(input: str):
 async def get_input_tags(input: str, forced_title: str = None):
     try:
         input = input.strip()
-        process = await asyncio.create_subprocess_exec(
-            "ffprobe",
-            "-v",
-            "error",
-            "-print_format",
-            "json",
-            "-show_format",
-            "-show_streams",
-            "-timeout",
-            "5000000",  # 5 seconds
-            input,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        proxy_option = _generate_ffmpeg_http_proxy_option(input)
+
+        if proxy_option == "":
+            process = await asyncio.create_subprocess_exec(
+                "ffprobe",
+                "-v",
+                "error",
+                "-print_format",
+                "json",
+                "-show_format",
+                "-show_streams",
+                "-timeout",
+                "5000000",  # 5 seconds
+                input,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        else:
+            process = await asyncio.create_subprocess_exec(
+                "ffprobe",
+                "-v",
+                "error",
+                "-print_format",
+                "json",
+                "-show_format",
+                "-show_streams",
+                "-timeout",
+                "5000000",  # 5 seconds
+                proxy_option.strip().split()[0],
+                proxy_option.strip().split()[1],
+                input,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
         stdout, stderr = await process.communicate()
         output = stdout.decode("utf-8").strip()
         error = stderr.decode("utf-8").strip()
