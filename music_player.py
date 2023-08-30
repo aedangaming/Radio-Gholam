@@ -2,6 +2,7 @@ import json
 import socket
 import asyncio
 import logging
+import requests
 from datetime import datetime
 from urllib.parse import urlparse
 from geoip_interface import lookup_country_code
@@ -252,8 +253,24 @@ def _generate_ffmpeg_http_proxy_option(link: str):
     if proxy_url is None:
         return ""
 
+    if not _check_proxy_health(proxy_url):
+        return ""
+
     _logger.debug(f"Using '{proxy_url}' as a proxy to play '{link}'")
     return f" -http_proxy {proxy_url}"
+
+
+def _check_proxy_health(proxy_url: str):
+    try:
+        response = requests.get(
+            "https://www.google.com",
+            proxies={"http": proxy_url, "https": proxy_url},
+            timeout=1,
+        )
+        return True
+    except:
+        _logger.debug(f"Proxy server '{proxy_url}' is not operational.")
+        return False
 
 
 async def play(
