@@ -572,6 +572,7 @@ async def import_playlist(voice_client: VoiceClient, input: str):
 
     count = 0
     for item in input.split("\n"):
+        item = item.strip()
         if item.startswith("#") or not validate_input(item):
             continue
         add_to_playlist(voice_client.guild.id, item)
