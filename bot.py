@@ -11,10 +11,20 @@ _logger.debug("Loading .env file...")
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 ALLOWED_SERVERS = json.loads(os.getenv("SERVER_ID"))
-MAX_IDLE_SECONDS = float(os.getenv("MAX_IDLE_SECONDS"))
+
+MAX_IDLE_SECONDS = os.getenv("MAX_IDLE_SECONDS")
+if not MAX_IDLE_SECONDS or MAX_IDLE_SECONDS == "":
+    MAX_IDLE_SECONDS = "300"
+MAX_IDLE_SECONDS = float(MAX_IDLE_SECONDS)
+
+PREFERRED_PROXIES = os.getenv("PREFERRED_PROXIES")
+if not PREFERRED_PROXIES or PREFERRED_PROXIES == "":
+    PREFERRED_PROXIES = "{}"
+PREFERRED_PROXIES = json.loads(PREFERRED_PROXIES)
 
 
-intents = nextcord.Intents.all()
+intents = nextcord.Intents.default()
+intents.message_content = True
 client = commands.Bot(command_prefix="!", intents=intents)
 
 

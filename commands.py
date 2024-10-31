@@ -121,6 +121,11 @@ async def play(
         ):
             return
 
+        if not music_player.validate_input(input):
+            _logger.debug(f"User input was not valid: '{input}'")
+            await interaction.send("Your input is not a valid link.", ephemeral=True)
+            return
+
         interaction_response = await interaction.send("Please wait...")
 
         user_voice_channel: VoiceChannel = interaction.user.voice.channel
@@ -147,6 +152,58 @@ async def play(
 
     except Exception:
         await handle_command_exception(interaction, interaction_response, "play")
+
+
+@client.slash_command(name="replay", description="Replay last playlist")
+async def replay(interaction: Interaction):
+    try:
+        if not await initial_checks_for_play_commands(interaction, "replay", ""):
+            return
+
+        if music_player.is_playlist_empty(interaction.guild_id):
+            _logger.debug(
+                f"Cannot perform 'replay' command when the playlist is empty. "
+                + f"guild_id: {interaction.guild_id}"
+            )
+            await interaction.send("There is nothing to play!", ephemeral=True)
+            return
+
+        voice_client: VoiceClient = music_player.get_voice_client_if_exists(
+            interaction.guild_id
+        )
+
+        if not music_player.is_idle(voice_client):
+            _logger.debug(
+                f"Cannot perform 'replay' command when the player is already playing. "
+                + f"guild_id: {interaction.guild_id}"
+            )
+            await interaction.send("The player is already playing!", ephemeral=True)
+            return
+
+        interaction_response = await interaction.send("Please wait...")
+
+        user_voice_channel: VoiceChannel = interaction.user.voice.channel
+        voice_client: VoiceClient = (
+            await music_player.connect_or_get_connected_voice_client(user_voice_channel)
+        )
+
+        if not voice_client:
+            _logger.debug(
+                f"Could not connect to the voice channel. Maybe the bot's permissions are insufficient. "
+                + f"Voice channel: '{user_voice_channel.name}' ({user_voice_channel.id}) "
+                + f"guild_id: {user_voice_channel.guild.id}"
+            )
+            await interaction_response.edit(
+                "Cannot connect to the voice channel. Check the bot permissions."
+            )
+            return
+
+        music_player.set_active_text_channel(voice_client, interaction.channel_id)
+        result_message = await music_player.replay(voice_client)
+        await interaction_response.edit(content=result_message)
+
+    except Exception:
+        await handle_command_exception(interaction, interaction_response, "replay")
 
 
 @client.slash_command(name="stop", description="Stop playing")
@@ -178,7 +235,10 @@ async def next(interaction: Interaction):
         if not await initial_command_checks(interaction, voice_client, "next"):
             return
 
-        if not await is_command_allowed_on_radio_and_tv_streams(
+        if await block_command_if_player_is_idle(interaction, voice_client, "next"):
+            return
+
+        if await block_command_on_radio_and_tv_streams(
             interaction, voice_client, "next"
         ):
             return
@@ -204,7 +264,10 @@ async def previous(interaction: Interaction):
         if not await initial_command_checks(interaction, voice_client, "previous"):
             return
 
-        if not await is_command_allowed_on_radio_and_tv_streams(
+        if await block_command_if_player_is_idle(interaction, voice_client, "previous"):
+            return
+
+        if await block_command_on_radio_and_tv_streams(
             interaction, voice_client, "previous"
         ):
             return
@@ -235,7 +298,10 @@ async def loop(
         ):
             return
 
-        if not await is_command_allowed_on_radio_and_tv_streams(
+        if await block_command_if_player_is_idle(interaction, voice_client, "loop"):
+            return
+
+        if await block_command_on_radio_and_tv_streams(
             interaction, voice_client, "loop"
         ):
             return
@@ -259,7 +325,10 @@ async def shuffle(interaction: Interaction):
         if not await initial_command_checks(interaction, voice_client, "shuffle"):
             return
 
-        if not await is_command_allowed_on_radio_and_tv_streams(
+        if await block_command_if_player_is_idle(interaction, voice_client, "shuffle"):
+            return
+
+        if await block_command_on_radio_and_tv_streams(
             interaction, voice_client, "shuffle"
         ):
             return
@@ -283,7 +352,10 @@ async def pause(interaction: Interaction):
         if not await initial_command_checks(interaction, voice_client, "pause"):
             return
 
-        if not await is_command_allowed_on_radio_and_tv_streams(
+        if await block_command_if_player_is_idle(interaction, voice_client, "pause"):
+            return
+
+        if await block_command_on_radio_and_tv_streams(
             interaction, voice_client, "pause"
         ):
             return
@@ -307,7 +379,10 @@ async def resume(interaction: Interaction):
         if not await initial_command_checks(interaction, voice_client, "resume"):
             return
 
-        if not await is_command_allowed_on_radio_and_tv_streams(
+        if await block_command_if_player_is_idle(interaction, voice_client, "resume"):
+            return
+
+        if await block_command_on_radio_and_tv_streams(
             interaction, voice_client, "resume"
         ):
             return
@@ -338,7 +413,10 @@ async def seek(
         ):
             return
 
-        if not await is_command_allowed_on_radio_and_tv_streams(
+        if await block_command_if_player_is_idle(interaction, voice_client, "seek"):
+            return
+
+        if await block_command_on_radio_and_tv_streams(
             interaction, voice_client, "seek"
         ):
             return
@@ -362,7 +440,7 @@ async def export_playlist(interaction: Interaction):
         if not await initial_command_checks(interaction, voice_client, "export"):
             return
 
-        if not await is_command_allowed_on_radio_and_tv_streams(
+        if await block_command_on_radio_and_tv_streams(
             interaction, voice_client, "export"
         ):
             return
@@ -461,12 +539,6 @@ async def initial_checks_for_play_commands(
         )
         return False
 
-    if command_name == "play":
-        if not music_player.validate_input(input):
-            _logger.debug(f"User input was not valid: '{input}'")
-            await interaction.send("Your input is not a valid link.", ephemeral=True)
-            return False
-
     return True
 
 
@@ -528,17 +600,23 @@ async def initial_command_checks(
     return True
 
 
-async def is_command_allowed_on_radio_and_tv_streams(
+async def block_command_if_player_is_idle(
     interaction: Interaction, voice_client: VoiceClient, command_name: str
 ):
-    if music_player.is_playlist_empty(voice_client):
+    if music_player.is_idle(voice_client):
         _logger.debug(
-            f"Cannot perform '{command_name}' command when the playlist is empty. "
+            f"Cannot perform '{command_name}' command when the player is idle. "
             + f"guild_id: {voice_client.guild.id}"
         )
         await interaction.send("Play something first!", ephemeral=True)
-        return False
+        return True
 
+    return False
+
+
+async def block_command_on_radio_and_tv_streams(
+    interaction: Interaction, voice_client: VoiceClient, command_name: str
+):
     if music_player.is_playing_radio_or_tv(voice_client):
         _logger.debug(
             f"Cannot perform '{command_name}' command while playing Radio or a TV station. "
@@ -548,9 +626,9 @@ async def is_command_allowed_on_radio_and_tv_streams(
             f"Cannot perform this command while playing Radio or a TV station.",
             ephemeral=True,
         )
-        return False
+        return True
 
-    return True
+    return False
 
 
 async def handle_command_exception(

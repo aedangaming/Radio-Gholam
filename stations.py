@@ -85,7 +85,7 @@ RADIO_STATIONS = [
     },
     {
         "name": "Lofi 5",
-        "url": "https://stream-148.zeno.fm/9oywvyaa76nuv?zs=Huu3CB1RQYi-F3GOTwINyA",
+        "url": "https://stream.zeno.fm/9oywvyaa76nuv",
     },
     {
         "name": "Lofi 6",
@@ -125,7 +125,7 @@ TV_STATIONS = [
     },
     {
         "name": "IRIB TV Navaa",
-        "url": "https://cdn-bsht1c86.telewebion.com/nava/live/576p/index.m3u8",
+        "url": "https://cdn-bsht1c86.telewebion.com/nava/live/480p/index.m3u8",
     },
     {
         "name": "IRIB TV Ofogh",
@@ -149,7 +149,7 @@ TV_STATIONS = [
     },
     {
         "name": "PRESSTV",
-        "url": "https://cdnlive.presstv.ir/cdnlive/smil:cdnlive.smil/playlist.m3u8",
+        "url": "https://cdnlive.presstv.ir/cdnlive/smil:cdnlive.smil/chunklist_b394100_slen.m3u8",
     },
 ]
 

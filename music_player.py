@@ -1,16 +1,19 @@
 import json
+import socket
 import asyncio
 import logging
+import requests
 from datetime import datetime
+from urllib.parse import urlparse
+from geoip_interface import lookup_country_code
 from nextcord import VoiceClient, VoiceChannel, VoiceState, Member, FFmpegOpusAudio
 
-from bot import client, MAX_IDLE_SECONDS
+from bot import client, MAX_IDLE_SECONDS, PREFERRED_PROXIES
 from playlist import (
     initialize_playlist,
     add_to_playlist,
     clear_playlist,
     get_current_track,
-    remove_voice_context,
     shuffle_playlist,
     get_playlist_size,
     voice_contexts,
@@ -96,6 +99,10 @@ async def connect_or_get_connected_voice_client(voice_channel: VoiceChannel):
     if not voice_contexts.get(voice_client.guild.id):
         initialize_playlist(voice_client.guild.id)
 
+    _logger.debug(
+        f"Connected VoiceClient for '{voice_channel.name}' ({voice_channel.id}) is ready."
+    )
+
     return voice_client
 
 
@@ -106,7 +113,6 @@ async def disconnect_voice_client(voice_client: VoiceClient):
                 _stop_voice_client(voice_client)
             await voice_client.disconnect()
             _logger.debug(f"VoiceClient disonnected. guild_id: {voice_client.guild.id}")
-            remove_voice_context(voice_client.guild.id)
     except Exception:
         _logger.exception(
             f"Exception occurred when disconnecting a voice client. guild_id: {voice_client.guild.id}"
@@ -211,19 +217,16 @@ async def play_on_voice_client(
     final_timestamp = None
     if seek_timestamp:
         final_timestamp = seek_timestamp
-        audio_source = FFmpegOpusAudio(
-            input,
-            before_options=f"-fflags discardcorrupt -ss {seek_timestamp}",
-        )
     elif starting_timestamp:
         final_timestamp = starting_timestamp
-        audio_source = FFmpegOpusAudio(
-            input,
-            before_options=f"-fflags discardcorrupt -ss {starting_timestamp}",
-        )
         playlist_item["starting_timestamp"] = None
-    else:
-        audio_source = FFmpegOpusAudio(input, before_options="-fflags discardcorrupt")
+
+    audio_source = FFmpegOpusAudio(
+        input,
+        before_options=f"-fflags discardcorrupt"
+        + f"{_generate_ffmpeg_http_proxy_option(input)}"
+        + f"{_generate_ffmpeg_start_timestamp_option(final_timestamp)}",
+    )
 
     voice_client.play(audio_source, after=lambda e: decide_next_track(voice_client))
     _logger.debug(
@@ -231,6 +234,43 @@ async def play_on_voice_client(
         + f"({voice_client.channel.id}) effective timestamp: {final_timestamp}"
     )
     await update_status_text(voice_client)
+
+
+def _generate_ffmpeg_start_timestamp_option(timestamp: str):
+    if timestamp is None:
+        return ""
+    return f" -ss {timestamp}"
+
+
+def _generate_ffmpeg_http_proxy_option(link: str):
+    parsed_url = urlparse(link)
+    host = parsed_url.netloc.split(":")[0]
+    ip = socket.gethostbyname(host)
+    country_code = lookup_country_code(ip)
+    _logger.debug(f"Host country detected as '{country_code}' for '{link}'")
+    proxy_url = PREFERRED_PROXIES.get(country_code)
+
+    if proxy_url is None:
+        return ""
+
+    if not _check_proxy_health(proxy_url):
+        return ""
+
+    _logger.debug(f"Using '{proxy_url}' as a proxy to play '{link}'")
+    return f" -http_proxy {proxy_url}"
+
+
+def _check_proxy_health(proxy_url: str):
+    try:
+        response = requests.get(
+            "https://www.google.com",
+            proxies={"http": proxy_url, "https": proxy_url},
+            timeout=1,
+        )
+        return True
+    except:
+        _logger.debug(f"Proxy server '{proxy_url}' is not operational.")
+        return False
 
 
 async def play(
@@ -293,7 +333,21 @@ async def decide_next_track(voice_client: VoiceClient):
         index = context["current_track_index"]
 
         context["last_interaction_time"] = datetime.now()
+
+        if context["stop"]:
+            context["stop"] = False
+            context["idle"] = True
+            context["deciding_next_track"] = False
+            return
+
         context["idle"] = False
+
+        if context["replay"]:
+            index = 0
+            await play_on_voice_client(voice_client, context["playlist"][index])
+            context["replay"] = None
+            context["deciding_next_track"] = False
+            return
 
         if context["seek"] is not None:  # Seek value can be zero
             await play_on_voice_client(
@@ -362,7 +416,11 @@ async def wait_until_deciding_next_track_is_finished(
 
 
 async def stop(voice_client: VoiceClient):
+    context = voice_contexts.get(voice_client.guild.id)
+    if context:
+        context["stop"] = True
     await disconnect_voice_client(voice_client)
+
     _logger.info(
         f"Stopped playing at '{voice_client.channel.name}' ({voice_client.channel.id}) "
         + f"in '{voice_client.guild.name}' ({voice_client.guild.id})"
@@ -394,6 +452,9 @@ async def previous(voice_client: VoiceClient):
 
 
 def loop(voice_client: VoiceClient, loop: str):
+    if is_playlist_empty(voice_client.guild.id):
+        return "Play something first!"
+
     context = voice_contexts[voice_client.guild.id]
     context["loop"] = loop
     _logger.info(
@@ -404,6 +465,9 @@ def loop(voice_client: VoiceClient, loop: str):
 
 
 def shuffle(voice_client: VoiceClient):
+    if is_playlist_empty(voice_client.guild.id):
+        return "Play something first!"
+
     shuffle_playlist(voice_client.guild.id)
     _logger.info(
         f"Shuffled playlist at '{voice_client.channel.name}' ({voice_client.channel.id}) "
@@ -451,6 +515,23 @@ def seek(voice_client: VoiceClient, timestamp: str):
     return f"Seeking to **{timestamp}**"
 
 
+async def replay(voice_client: VoiceClient):
+    if is_playlist_empty(voice_client.guild.id):
+        return "There is nothing to play!"
+
+    if not is_idle(voice_client):
+        return "The player is already playing!"
+
+    context = voice_contexts[voice_client.guild.id]
+    context["replay"] = True
+    _logger.info(
+        f"Replayed playlist at '{voice_client.channel.name}' ({voice_client.channel.id}) "
+        + f"in '{voice_client.guild.name}' ({voice_client.guild.id})"
+    )
+    await decide_next_track(voice_client)
+    return "Replaying last playlist."
+
+
 def export_playlist(voice_client: VoiceClient):
     context = voice_contexts[voice_client.guild.id]
 
@@ -491,6 +572,7 @@ async def import_playlist(voice_client: VoiceClient, input: str):
 
     count = 0
     for item in input.split("\n"):
+        item = item.strip()
         if item.startswith("#") or not validate_input(item):
             continue
         add_to_playlist(voice_client.guild.id, item)
@@ -536,25 +618,30 @@ async def update_status_text(voice_client: VoiceClient):
 
     try:
         if status_msg["message_id"]:  # Delete previous status message
-            channel = client.get_channel(status_msg["last_channel_id"])
-            message = await channel.fetch_message(status_msg["message_id"])
-            await message.delete()
-            _logger.debug(
-                f"Deleted old playback status message. guild_id: {voice_client.guild.id} "
-                + f"channel: {channel.name} ({channel.id})"
-            )
+            try:
+                channel = client.get_channel(status_msg["last_channel_id"])
+                message = await channel.fetch_message(status_msg["message_id"])
+                await message.delete()
+                status_messages[voice_client.guild.id]["message_id"] = None
+                _logger.debug(
+                    f"Deleted old playback status message. guild_id: {voice_client.guild.id} "
+                    + f"channel: '{channel.name}' ({channel.id})"
+                )
+            except Exception:
+                _logger.exception(
+                    "Exception occured while deleting previous status message. "
+                    + f"guild_id: {voice_client.guild.id}"
+                )
 
+        # Send new status message
         channel = client.get_channel(status_msg["channel_id"])
         status = generate_playback_status_text(voice_client.guild.id)
         sent_message = await channel.send(status)
-        status_messages[voice_client.guild.id] = {
-            "last_channel_id": channel.id,
-            "channel_id": channel.id,
-            "message_id": sent_message.id,
-        }
+        status_messages[voice_client.guild.id]["last_channel_id"] = channel.id
+        status_messages[voice_client.guild.id]["message_id"] = sent_message.id
         _logger.debug(
             f"Sent new playback status message. guild_id: {voice_client.guild.id} "
-            + f"channel: {channel.name} ({channel.id}) message: {status}"
+            + f"channel: '{channel.name}' ({channel.id}) message: '{status}'"
         )
     except Exception:
         _logger.exception(
@@ -573,8 +660,8 @@ def is_idle(voice_client: VoiceClient):
         return True
 
 
-def is_playlist_empty(voice_client: VoiceClient):
-    return get_playlist_size(voice_client.guild.id) == 0
+def is_playlist_empty(guild_id: int):
+    return get_playlist_size(guild_id) == 0
 
 
 def is_playing_radio_or_tv(voice_client: VoiceClient):
@@ -608,18 +695,41 @@ def validate_input(input: str):
 async def get_input_tags(input: str, forced_title: str = None):
     try:
         input = input.strip()
-        process = await asyncio.create_subprocess_exec(
-            "ffprobe",
-            "-v",
-            "error",
-            "-print_format",
-            "json",
-            "-show_format",
-            "-show_streams",
-            input,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        proxy_option = _generate_ffmpeg_http_proxy_option(input)
+
+        if proxy_option == "":
+            process = await asyncio.create_subprocess_exec(
+                "ffprobe",
+                "-v",
+                "error",
+                "-print_format",
+                "json",
+                "-show_format",
+                "-show_streams",
+                "-timeout",
+                "5000000",  # 5 seconds
+                input,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        else:
+            process = await asyncio.create_subprocess_exec(
+                "ffprobe",
+                "-v",
+                "error",
+                "-print_format",
+                "json",
+                "-show_format",
+                "-show_streams",
+                "-timeout",
+                "5000000",  # 5 seconds
+                proxy_option.strip().split()[0],
+                proxy_option.strip().split()[1],
+                input,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
         stdout, stderr = await process.communicate()
         output = stdout.decode("utf-8").strip()
         error = stderr.decode("utf-8").strip()
