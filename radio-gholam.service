@@ -1,0 +1,15 @@
+[Unit]
+Description=Radio Gholam Discord Bot
+After=network.target
+
+[Service]
+Type=simple
+User=username
+Group=username
+Restart=always
+RestartSec=5
+ExecStart=/path/to/Radio-Gholam/start.sh
+ExecStop=/usr/bin/kill "$MAINPID"
+
+[Install]
+WantedBy=multi-user.target
